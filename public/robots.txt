@@ -13,4 +13,4 @@ Allow: /
 User-agent: LinkedInBot
 Allow: /
 
-Sitemap: https://veateran-site.vercel.app/sitemap.xml
+Sitemap: https://www.veateran.gr/sitemap.xml
