@@ -58,10 +58,10 @@ export default function GalleryPage() {
           </h1>
           <p className="mx-auto mt-6 max-w-3xl text-base leading-7 text-white/78">
             Μια ματιά στις λεπτομέρειες, την αισθητική και την παρουσία του The
-            VeatERAN Van — από ημερήσια setups μέχρι βραδινή ατμόσφαιρα.
+            VeatERAN Van, από ημερήσια setups μέχρι βραδινή ατμόσφαιρα.
           </p>
           <p className="mx-auto mt-6 max-w-3xl text-xs font-semibold uppercase tracking-[0.18em] text-[#f3d58f]">
-            Vintage αισθητική · Food & bar setup · Με βάση την Αθήνα
+            Vintage αισθητική · Food & bar setup
           </p>
         </div>
       </section>
