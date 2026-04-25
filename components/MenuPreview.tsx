@@ -10,7 +10,7 @@ export function MenuPreview() {
           <h2 className="mt-5 text-3xl font-semibold tracking-tight text-[#0A5458] md:text-4xl">
             Ενδεικτικές γεύσεις για χαλαρό, φροντισμένο service.
           </h2>
-          <a href="#quote" className="mt-8 inline-flex rounded-full bg-[#0A5458] px-6 py-3.5 text-sm font-bold text-white transition hover:bg-[#07383b]">
+          <a href="/request-quote" className="mt-8 inline-flex rounded-full bg-[#0A5458] px-6 py-3.5 text-sm font-bold text-white transition hover:bg-[#07383b]">
             Ζήτησε custom πρόταση
           </a>
         </div>

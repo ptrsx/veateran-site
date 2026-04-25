@@ -1,12 +1,12 @@
 import { homepageNav } from "@/lib/homepage-data";
 
 export function Header() {
-  const mobileNav = [...homepageNav, { label: "Ζήτησε Προσφορά", href: "#quote" }];
+  const mobileNav = [...homepageNav, { label: "Ζήτησε Προσφορά", href: "/request-quote" }];
 
   return (
     <header className="fixed inset-x-0 top-0 z-50 border-b border-white/10 bg-[#062f32]/88 backdrop-blur-xl">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-3.5 sm:px-8">
-        <a href="#" className="group flex items-center gap-3" aria-label="The VeatERAN Van">
+        <a href="/" className="group flex items-center gap-3" aria-label="The VeatERAN Van">
           <span className="grid size-9 place-items-center rounded-full border border-[#d9b76f]/60 bg-[#f7f0df] text-sm font-semibold text-[#0A5458] shadow-[0_0_24px_rgba(217,183,111,0.2)]">
             V
           </span>
@@ -27,7 +27,7 @@ export function Header() {
           ))}
         </nav>
         <a
-          href="#quote"
+          href="/request-quote"
           className="hidden rounded-full border border-[#d9b76f]/50 bg-[#d9b76f] px-5 py-2.5 text-sm font-semibold text-[#082f31] shadow-lg shadow-black/10 transition hover:bg-[#f1d993] md:inline-flex"
         >
           Ζήτησε Προσφορά

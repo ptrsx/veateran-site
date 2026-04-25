@@ -17,7 +17,7 @@ export function Hero() {
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <a
-              href="#quote"
+              href="/request-quote"
               className="rounded-full bg-[#d9b76f] px-6 py-3.5 text-center text-sm font-bold text-[#082f31] shadow-xl shadow-black/15 transition hover:bg-[#f1d993]"
             >
               Ζήτησε Προσφορά

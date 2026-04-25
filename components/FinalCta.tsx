@@ -12,7 +12,7 @@ export function FinalCta() {
           εκδηλώσεις σε όλη την Ελλάδα.
         </p>
         <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
-          <a href="mailto:sales@veateran.gr" className="rounded-full bg-[#d9b76f] px-7 py-3.5 text-sm font-bold text-[#082f31] transition hover:bg-[#f1d993]">
+          <a href="/request-quote" className="rounded-full bg-[#d9b76f] px-7 py-3.5 text-sm font-bold text-[#082f31] transition hover:bg-[#f1d993]">
             Ζήτησε Προσφορά
           </a>
           <a href="tel:+306947005008" className="rounded-full border border-white/25 px-7 py-3.5 text-sm font-bold text-white transition hover:border-[#d9b76f] hover:text-[#f3d58f]">
