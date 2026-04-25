@@ -5,7 +5,7 @@ const title = "The VeatERAN Van | Vintage Catering & Bar Van για Events";
 const description =
   "Vintage mobile catering & bar van με βάση την Αθήνα για γάμους, βαπτίσεις, parties και εταιρικά events. Street food, cocktails και πλήρως εξοπλισμένο setup στον χώρο σου.";
 const siteUrl = "https://veateran-site.vercel.app";
-const ogImage = "/images/og-veateran.jpg";
+const ogImage = "https://veateran-site.vercel.app/images/og-veateran.jpg";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -13,6 +13,10 @@ export const metadata: Metadata = {
   description,
   alternates: {
     canonical: siteUrl,
+  },
+  robots: {
+    index: true,
+    follow: true,
   },
   openGraph: {
     title,
