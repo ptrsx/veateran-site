@@ -20,7 +20,7 @@ export const services = [
   },
   {
     title: "Ιδιωτικά parties",
-    description: "Ευέλικτο van setup για σπίτια, κήπους, rooftops και ιδιωτικούς χώρους.",
+    description: "Ευέλικτο food & bar setup για σπίτια, κτήματα, αυλές και ιδιωτικές εκδηλώσεις.",
   },
   {
     title: "Εταιρικά events",
