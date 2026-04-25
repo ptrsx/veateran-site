@@ -26,12 +26,37 @@ const inputClass =
 const labelClass = "text-sm font-semibold text-[#0A5458]";
 
 export function RequestQuoteForm() {
-  const [submitted, setSubmitted] = useState(false);
+  const [status, setStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    event.currentTarget.reset();
-    setSubmitted(true);
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+
+    setStatus("submitting");
+
+    let response: Response;
+
+    try {
+      response = await fetch("/api/request-quote", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(Object.fromEntries(formData)),
+      });
+    } catch {
+      setStatus("error");
+      return;
+    }
+
+    if (response.ok) {
+      form.reset();
+      setStatus("success");
+      return;
+    }
+
+    setStatus("error");
   }
 
   return (
@@ -102,15 +127,19 @@ export function RequestQuoteForm() {
         </div>
         <button
           type="submit"
-          className="mt-7 w-full rounded-full bg-[#0A5458] px-7 py-3.5 text-sm font-bold text-white shadow-lg shadow-[#0A5458]/15 transition hover:bg-[#07383b] sm:w-auto"
+          disabled={status === "submitting"}
+          className="mt-7 w-full rounded-full bg-[#0A5458] px-7 py-3.5 text-sm font-bold text-white shadow-lg shadow-[#0A5458]/15 transition hover:bg-[#07383b] disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto"
         >
-          Αποστολή ενδιαφέροντος
+          {status === "submitting" ? "Αποστολή..." : "Αποστολή ενδιαφέροντος"}
         </button>
-        {submitted ? (
-          <p className="mt-5 rounded-2xl border border-[#d9b76f]/35 bg-[#f8f2e5] p-4 text-sm leading-6 text-[#3d3a32]">
-            Ευχαριστούμε! Προς το παρόν η φόρμα είναι σε δοκιμαστική λειτουργία.
-            Μπορείς να μας στείλεις απευθείας email στο sales@veateran.gr ή να
-            καλέσεις στο +30 6947 005 008.
+        {status === "success" ? (
+          <p className="mt-5 rounded-2xl border border-[#d9b76f]/35 bg-[#f8f2e5] p-4 text-sm leading-6 text-[#3d3a32]" aria-live="polite">
+            Το αίτημά σου στάλθηκε με επιτυχία. Θα επικοινωνήσουμε σύντομα μαζί σου.
+          </p>
+        ) : null}
+        {status === "error" ? (
+          <p className="mt-5 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm leading-6 text-[#3d3a32]" aria-live="polite">
+            Κάτι πήγε στραβά. Δοκίμασε ξανά ή επικοινώνησε μαζί μας στο sales@veateran.gr.
           </p>
         ) : null}
       </form>
