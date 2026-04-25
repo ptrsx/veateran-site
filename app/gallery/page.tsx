@@ -10,7 +10,6 @@ export const metadata: Metadata = {
 
 type GalleryImage = {
   src: string;
-  label: string;
   alt: string;
   featured?: boolean;
 };
@@ -18,23 +17,19 @@ type GalleryImage = {
 const dayImages: GalleryImage[] = [
   {
     src: "/images/gallery/van-gallery-day-01.jpg",
-    label: "Ημερήσιο setup",
     alt: "Ημερήσια φωτογραφία του The VeatERAN Van σε vintage setup",
     featured: true,
   },
   {
     src: "/images/gallery/van-gallery-day-02.jpg",
-    label: "Ημερήσιο setup",
     alt: "Το The VeatERAN Van σε ημερήσιο event setup",
   },
   {
     src: "/images/gallery/van-gallery-day-03.jpg",
-    label: "Λεπτομέρειες van",
     alt: "Λεπτομέρεια από το vintage van του The VeatERAN Van",
   },
   {
     src: "/images/gallery/van-gallery-day-04.jpg",
-    label: "Food & bar setup",
     alt: "Food και bar setup του The VeatERAN Van σε ημερήσιο φως",
   },
 ];
@@ -42,17 +37,14 @@ const dayImages: GalleryImage[] = [
 const nightImages: GalleryImage[] = [
   {
     src: "/images/gallery/van-gallery-night-00.jpg",
-    label: "Βραδινή ατμόσφαιρα",
     alt: "Το The VeatERAN Van σε βραδινή ατμόσφαιρα",
   },
   {
     src: "/images/gallery/van-gallery-night-01.jpg",
-    label: "Βραδινό setup",
     alt: "Βραδινό setup του The VeatERAN Van με φωτισμό",
   },
   {
     src: "/images/gallery/van-gallery-night-02.jpg",
-    label: "Event mood",
     alt: "Βραδινή παρουσία του The VeatERAN Van σε event",
   },
 ];
@@ -79,9 +71,6 @@ function GalleryCard({
         className="object-cover transition duration-500 group-hover:scale-[1.03]"
       />
       <div className="absolute inset-0 bg-gradient-to-t from-black/62 via-[#0A5458]/10 to-transparent" />
-      <p className="absolute bottom-5 left-5 right-5 text-xs font-semibold uppercase tracking-[0.24em] text-[#f3d58f]">
-        {image.label}
-      </p>
     </article>
   );
 }

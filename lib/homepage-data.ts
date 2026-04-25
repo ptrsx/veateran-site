@@ -3,7 +3,7 @@ export const homepageNav = [
   { label: "Υπηρεσίες", href: "/#services" },
   { label: "Μενού", href: "/#menu" },
   { label: "Εκδηλώσεις", href: "/#events" },
-  { label: "Φωτογραφίες", href: "/gallery" },
+  { label: "The VeatERAN Van", href: "/gallery" },
 ];
 
 export const services = [
