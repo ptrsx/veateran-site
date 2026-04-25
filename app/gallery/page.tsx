@@ -1,17 +1,11 @@
 import type { Metadata } from "next";
-import Image from "next/image";
+import { GalleryImage, GalleryLightbox } from "@/components/GalleryLightbox";
 import { Header } from "@/components/Header";
 
 export const metadata: Metadata = {
   title: "Gallery | The VeatERAN Van",
   description:
     "Δες φωτογραφίες του The VeatERAN Van, ενός vintage mobile catering & bar van με βάση την Αθήνα για γάμους, βαπτίσεις, parties και εταιρικά events.",
-};
-
-type GalleryImage = {
-  src: string;
-  alt: string;
-  featured?: boolean;
 };
 
 const dayImages: GalleryImage[] = [
@@ -49,32 +43,6 @@ const nightImages: GalleryImage[] = [
   },
 ];
 
-function GalleryCard({
-  image,
-  priority = false,
-}: {
-  image: GalleryImage;
-  priority?: boolean;
-}) {
-  return (
-    <article
-      className={`group relative overflow-hidden rounded-2xl border border-[#d9b76f]/25 bg-[#0A5458] shadow-md shadow-[#0A5458]/5 ${
-        image.featured ? "min-h-[420px] md:col-span-4 md:row-span-2" : "min-h-72 md:col-span-2"
-      }`}
-    >
-      <Image
-        src={image.src}
-        alt={image.alt}
-        fill
-        priority={priority}
-        sizes={image.featured ? "(min-width: 768px) 66vw, 100vw" : "(min-width: 768px) 33vw, 100vw"}
-        className="object-cover transition duration-500 group-hover:scale-[1.03]"
-      />
-      <div className="absolute inset-0 bg-gradient-to-t from-black/62 via-[#0A5458]/10 to-transparent" />
-    </article>
-  );
-}
-
 export default function GalleryPage() {
   return (
     <main className="min-h-screen bg-[#fffaf0]">
@@ -104,29 +72,8 @@ export default function GalleryPage() {
             <p className="text-xs font-bold uppercase tracking-[0.34em] text-[#b58d3d]">
               Ημέρα
             </p>
-            <h2 className="mt-4 text-3xl font-semibold tracking-tight text-[#0A5458] md:text-4xl">
-              Καθαρές γραμμές, φυσικό φως και vintage λεπτομέρειες.
-            </h2>
           </div>
-          <div className="grid auto-rows-[minmax(280px,auto)] gap-4 md:grid-cols-6">
-            {dayImages.map((image, index) => (
-              <GalleryCard key={image.src} image={image} priority={index === 0} />
-            ))}
-          </div>
-
-          <div className="mb-8 mt-16">
-            <p className="text-xs font-bold uppercase tracking-[0.34em] text-[#b58d3d]">
-              Βράδυ
-            </p>
-            <h2 className="mt-4 text-3xl font-semibold tracking-tight text-[#0A5458] md:text-4xl">
-              Ζεστός φωτισμός και ατμόσφαιρα για after-dark events.
-            </h2>
-          </div>
-          <div className="grid gap-4 md:grid-cols-3">
-            {nightImages.map((image) => (
-              <GalleryCard key={image.src} image={image} />
-            ))}
-          </div>
+          <GalleryLightbox dayImages={dayImages} nightImages={nightImages} />
         </div>
       </section>
 
