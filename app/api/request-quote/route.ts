@@ -7,10 +7,10 @@ type QuotePayload = {
   phone?: unknown;
   email?: unknown;
   eventDate?: unknown;
-  location?: unknown;
+  eventLocation?: unknown;
   eventType?: unknown;
   guestCount?: unknown;
-  interest?: unknown;
+  interestedIn?: unknown;
   message?: unknown;
 };
 
@@ -52,10 +52,10 @@ export async function POST(request: Request) {
     phone: getString(payload.phone),
     email: getString(payload.email),
     eventDate: getString(payload.eventDate),
-    location: getString(payload.location),
+    eventLocation: getString(payload.eventLocation),
     eventType: getString(payload.eventType),
     guestCount: getString(payload.guestCount),
-    interest: getString(payload.interest),
+    interestedIn: getString(payload.interestedIn),
     message: getString(payload.message),
   };
 
@@ -91,10 +91,10 @@ export async function POST(request: Request) {
     ["Τηλέφωνο", values.phone],
     ["Email", values.email],
     ["Ημερομηνία εκδήλωσης", values.eventDate || "-"],
-    ["Τοποθεσία εκδήλωσης", values.location || "-"],
+    ["Τοποθεσία εκδήλωσης", values.eventLocation || "-"],
     ["Τύπος εκδήλωσης", values.eventType],
     ["Αριθμός καλεσμένων", values.guestCount || "-"],
-    ["Ενδιαφέρομαι για", values.interest || "-"],
+    ["Ενδιαφέρομαι για", values.interestedIn || "-"],
     ["Σημειώσεις", values.message || "Δεν συμπληρώθηκαν"],
   ];
 

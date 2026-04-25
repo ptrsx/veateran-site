@@ -84,7 +84,7 @@ export function RequestQuoteForm() {
           </label>
           <label className={`${labelClass} md:col-span-2`}>
             Τοποθεσία εκδήλωσης
-            <input className={inputClass} name="location" type="text" required />
+            <input className={inputClass} name="eventLocation" type="text" />
           </label>
           <label className={labelClass}>
             Τύπος εκδήλωσης
@@ -105,7 +105,7 @@ export function RequestQuoteForm() {
           </label>
           <label className={`${labelClass} md:col-span-2`}>
             Ενδιαφέρομαι για
-            <select className={inputClass} name="interest" required defaultValue="">
+            <select className={inputClass} name="interestedIn" defaultValue="">
               <option value="" disabled>
                 Επίλεξε υπηρεσία
               </option>
