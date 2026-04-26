@@ -6,7 +6,7 @@ import { Header } from "@/components/Header";
 export const metadata: Metadata = {
   title: "Η ιστορία μας | The VeatERAN Van",
   description:
-    "Η ιστορία πίσω από το The VeatERAN Van: από ένα ψητοπωλείο στην Αθήνα το 1995 μέχρι ένα vintage catering & bar van για εκδηλώσεις σε όλη την Ελλάδα.",
+    "Η ιστορία πίσω από το The VeatERAN Van: από ένα ψητοπωλείο στην Ηλιούπολη το 1995 μέχρι ένα vintage catering & bar van για εκδηλώσεις σε όλη την Ελλάδα.",
 };
 
 const storyParagraphs = [
