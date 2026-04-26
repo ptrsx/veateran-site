@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useRef } from "react";
 import { homepageNav } from "@/lib/homepage-data";
 
@@ -51,17 +52,22 @@ export function Header() {
     <header className="fixed inset-x-0 top-0 z-50 border-b border-white/10 bg-[#062f32]/88 backdrop-blur-xl">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-3.5 sm:px-8">
         <a href="/" className="group flex items-center gap-3" aria-label="The VeatERAN Van">
-          <span className="grid size-9 place-items-center rounded-full border border-[#d9b76f]/60 bg-[#f7f0df] text-sm font-semibold text-[#0A5458] shadow-[0_0_24px_rgba(217,183,111,0.2)]">
-            V
-          </span>
-          <span className="leading-none">
-            <span className="block text-xs font-semibold uppercase tracking-[0.22em] text-white">
-              The VeatERAN
-            </span>
-            <span className="mt-1 block text-[11px] uppercase tracking-[0.34em] text-[#d9b76f]">
-              Van
-            </span>
-          </span>
+          <Image
+            src="/images/brand/veateran-logo-circle-512.png"
+            alt=""
+            width={36}
+            height={36}
+            className="size-9 rounded-full border border-[#d9b76f]/60 bg-[#f7f0df] shadow-[0_0_24px_rgba(217,183,111,0.2)]"
+            priority
+          />
+          <Image
+            src="/images/brand/veateran-wordmark-cropped-transparent.svg"
+            alt="The VeatERAN Van"
+            width={132}
+            height={31}
+            className="h-7 w-auto"
+            priority
+          />
         </a>
         <nav className="hidden items-center gap-8 text-sm text-white/78 md:flex">
           {homepageNav.map((item) => (
