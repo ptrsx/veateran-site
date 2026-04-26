@@ -1,5 +1,5 @@
 export const homepageNav = [
-  { label: "Ιστορία", href: "/#story" },
+  { label: "Ιστορία", href: "/story" },
   { label: "Υπηρεσίες", href: "/#services" },
   { label: "Μενού", href: "/menu" },
   { label: "Εκδηλώσεις", href: "/#events" },

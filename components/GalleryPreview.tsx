@@ -30,7 +30,6 @@ export function GalleryPreview() {
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/68 via-[#0A5458]/18 to-transparent" />
               <div className="relative z-10 flex flex-1 flex-col justify-between">
-                <span className="text-xs uppercase tracking-[0.24em] text-[#f3d58f]">Ιδέα εκδήλωσης</span>
                 <h3 className="relative z-10 text-xl font-semibold">{event.label}</h3>
               </div>
             </article>
