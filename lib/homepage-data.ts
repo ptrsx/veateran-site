@@ -1,9 +1,10 @@
 export const homepageNav = [
-  { label: "Ιστορία", href: "/story" },
+  { label: "Αρχική", href: "/" },
   { label: "Υπηρεσίες", href: "/#services" },
   { label: "Μενού", href: "/menu" },
   { label: "Εκδηλώσεις", href: "/#events" },
   { label: "The VeatERAN Van", href: "/gallery" },
+  { label: "Ιστορία", href: "/story" },
 ];
 
 export const services = [
