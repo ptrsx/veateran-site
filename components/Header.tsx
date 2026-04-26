@@ -1,7 +1,51 @@
+"use client";
+
+import { useEffect, useRef } from "react";
 import { homepageNav } from "@/lib/homepage-data";
 
 export function Header() {
+  const mobileMenuRef = useRef<HTMLDetailsElement>(null);
   const mobileNav = [...homepageNav, { label: "Ζήτησε Προσφορά", href: "/request-quote" }];
+
+  const closeMobileMenu = () => {
+    if (mobileMenuRef.current) {
+      mobileMenuRef.current.open = false;
+    }
+  };
+
+  useEffect(() => {
+    const details = mobileMenuRef.current;
+
+    if (!details) {
+      return;
+    }
+
+    const closeMenu = () => {
+      details.open = false;
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closeMenu();
+      }
+    };
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (event.target instanceof Node && !details.contains(event.target)) {
+        closeMenu();
+      }
+    };
+
+    window.addEventListener("scroll", closeMenu, { passive: true });
+    document.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("pointerdown", handlePointerDown);
+
+    return () => {
+      window.removeEventListener("scroll", closeMenu);
+      document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("pointerdown", handlePointerDown);
+    };
+  }, []);
 
   return (
     <header className="fixed inset-x-0 top-0 z-50 border-b border-white/10 bg-[#062f32]/88 backdrop-blur-xl">
@@ -32,7 +76,7 @@ export function Header() {
         >
           Ζήτησε Προσφορά
         </a>
-        <details className="group relative md:hidden">
+        <details ref={mobileMenuRef} className="group relative md:hidden">
           <summary className="cursor-pointer list-none rounded-full border border-[#d9b76f]/45 px-4 py-2 text-sm font-semibold text-white transition hover:border-[#d9b76f] hover:text-[#f3d58f] [&::-webkit-details-marker]:hidden">
             Menu
           </summary>
@@ -42,6 +86,7 @@ export function Header() {
                 key={item.href}
                 href={item.href}
                 className="block rounded-xl px-4 py-3 text-sm text-white/78 transition hover:bg-white/[0.06] hover:text-[#f3d58f]"
+                onClick={closeMobileMenu}
               >
                 {item.label}
               </a>
