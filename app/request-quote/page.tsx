@@ -23,8 +23,7 @@ export default function RequestQuotePage() {
           </h1>
           <p className="mx-auto mt-6 max-w-3xl text-base leading-7 text-white/78">
             Συμπλήρωσε λίγες βασικές πληροφορίες για την εκδήλωσή σου και θα
-            επικοινωνήσουμε μαζί σου με διαθεσιμότητα, προτάσεις και ενδεικτικό
-            κόστος.
+            επικοινωνήσουμε μαζί σου με διαθεσιμότητα, προτάσεις και κόστος.
           </p>
           <p className="mx-auto mt-6 max-w-3xl text-xs font-semibold uppercase tracking-[0.18em] text-[#f3d58f]">
             Βάση στην Αθήνα · Διαθέσιμο για εκδηλώσεις σε όλη την Ελλάδα · 30
