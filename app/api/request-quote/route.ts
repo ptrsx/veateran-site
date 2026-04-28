@@ -1,20 +1,40 @@
 import nodemailer from "nodemailer";
 
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import type { QuoteRequestInsert } from "@/lib/crm/types";
+
 export const runtime = "nodejs";
 
 type QuotePayload = {
   name?: unknown;
   phone?: unknown;
   email?: unknown;
+  date?: unknown;
   eventDate?: unknown;
+  location?: unknown;
   eventLocation?: unknown;
   eventType?: unknown;
   guestCount?: unknown;
   interestedIn?: unknown;
+  notes?: unknown;
   message?: unknown;
 };
 
-const requiredFields: Array<keyof QuotePayload> = [
+const successMessage = "Το αίτημά σου στάλθηκε με επιτυχία. Θα επικοινωνήσουμε σύντομα μαζί σου.";
+
+type NormalizedQuotePayload = {
+  name: string;
+  phone: string;
+  email: string;
+  eventDate: string;
+  eventLocation: string;
+  eventType: string;
+  guestCount: string;
+  interestedIn: string;
+  message: string;
+};
+
+const requiredFields: Array<keyof NormalizedQuotePayload> = [
   "name",
   "phone",
   "email",
@@ -38,6 +58,19 @@ function isValidEmail(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
+function getNullableString(value: string) {
+  return value || null;
+}
+
+function getNullablePositiveInteger(value: string) {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
 export async function POST(request: Request) {
   let payload: QuotePayload;
 
@@ -47,16 +80,16 @@ export async function POST(request: Request) {
     return Response.json({ error: "Invalid request body." }, { status: 400 });
   }
 
-  const values = {
+  const values: NormalizedQuotePayload = {
     name: getString(payload.name),
     phone: getString(payload.phone),
     email: getString(payload.email),
-    eventDate: getString(payload.eventDate),
-    eventLocation: getString(payload.eventLocation),
+    eventDate: getString(payload.eventDate) || getString(payload.date),
+    eventLocation: getString(payload.eventLocation) || getString(payload.location),
     eventType: getString(payload.eventType),
     guestCount: getString(payload.guestCount),
     interestedIn: getString(payload.interestedIn),
-    message: getString(payload.message),
+    message: getString(payload.message) || getString(payload.notes),
   };
 
   const missingFields = requiredFields.filter((field) => !values[field]);
@@ -130,5 +163,30 @@ export async function POST(request: Request) {
     return Response.json({ error: "Failed to send email." }, { status: 500 });
   }
 
-  return Response.json({ ok: true });
+  const quoteRequest: QuoteRequestInsert = {
+    status: "NEW",
+    name: values.name,
+    phone: values.phone,
+    email: values.email,
+    event_type: values.eventType,
+    event_date: getNullableString(values.eventDate),
+    location: getNullableString(values.eventLocation),
+    guest_count: getNullablePositiveInteger(values.guestCount),
+    interested_in: getNullableString(values.interestedIn),
+    notes: getNullableString(values.message),
+    source: "website",
+  };
+
+  try {
+    const supabase = createSupabaseAdminClient();
+    const { error } = await supabase.from("quote_requests").insert(quoteRequest);
+
+    if (error) {
+      console.error("Failed to save quote request to Supabase.", error);
+    }
+  } catch (error) {
+    console.error("Failed to save quote request to Supabase.", error);
+  }
+
+  return Response.json({ ok: true, message: successMessage });
 }
