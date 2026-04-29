@@ -1,6 +1,7 @@
 import { AdminShell } from "@/components/AdminShell";
 import { requireAdminSession } from "@/lib/adminAuth";
 import { formatCurrency, formatNumber, formatPercent } from "@/lib/crm/formatters";
+import { getSourceLabel } from "@/lib/crm/source";
 import { statusLabels, statusToneClasses } from "@/lib/crm/status";
 import type { QuoteRequest, QuoteRequestStatus } from "@/lib/crm/types";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -100,6 +101,17 @@ export default async function StatsPage() {
   );
   const eventTypeRows = Object.entries(eventTypeCounts).sort((a, b) => b[1] - a[1]);
   const maxEventTypeCount = Math.max(...eventTypeRows.map(([, count]) => count), 0);
+
+  const sourceCounts = requests.reduce(
+    (counts, request) => {
+      const source = request.source ?? "other";
+      counts[source] = (counts[source] ?? 0) + 1;
+      return counts;
+    },
+    {} as Record<string, number>,
+  );
+  const sourceRows = Object.entries(sourceCounts).sort((a, b) => b[1] - a[1]);
+  const maxSourceCount = Math.max(...sourceRows.map(([, count]) => count), 0);
 
   const monthlyCounts = requests.reduce(
     (counts, request) => {
@@ -201,6 +213,16 @@ export default async function StatsPage() {
               </div>
             ))}
             {Object.keys(statusCounts).length === 0 ? <p className="text-sm text-[#5f594f]">Δεν υπάρχουν δεδομένα ακόμη.</p> : null}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-[#d9b76f]/25 bg-white/85 p-5 shadow-lg shadow-[#0A5458]/5">
+          <h2 className="text-xl font-semibold text-[#0A5458]">Αιτήματα ανά πηγή</h2>
+          <div className="mt-5 space-y-4">
+            {sourceRows.map(([source, count]) => (
+              <BarRow key={source} label={getSourceLabel(source)} max={maxSourceCount} value={count} />
+            ))}
+            {sourceRows.length === 0 ? <p className="text-sm text-[#5f594f]">Δεν υπάρχουν δεδομένα ακόμη.</p> : null}
           </div>
         </div>
       </section>

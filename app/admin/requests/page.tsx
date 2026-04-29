@@ -3,6 +3,7 @@ import Link from "next/link";
 import { AdminShell } from "@/components/AdminShell";
 import { requireAdminSession } from "@/lib/adminAuth";
 import { formatCurrency, formatDate, formatDateTime, formatNumber } from "@/lib/crm/formatters";
+import { getSourceLabel, isQuoteRequestSource, quoteRequestSources, sourceLabels } from "@/lib/crm/source";
 import { isQuoteRequestStatus, statusLabels, statusToneClasses } from "@/lib/crm/status";
 import type { QuoteRequest, QuoteRequestStatus } from "@/lib/crm/types";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -62,6 +63,7 @@ export default async function RequestsPage({ searchParams }: RequestsPageProps) 
   const params = await searchParams;
   const search = getParam(params, "search");
   const status = getParam(params, "status");
+  const source = getParam(params, "source");
   const eventType = getParam(params, "eventType");
   const minGuests = getParam(params, "minGuests");
   const maxGuests = getParam(params, "maxGuests");
@@ -80,6 +82,10 @@ export default async function RequestsPage({ searchParams }: RequestsPageProps) 
 
   if (isQuoteRequestStatus(status)) {
     query = query.eq("status", status);
+  }
+
+  if (isQuoteRequestSource(source)) {
+    query = query.eq("source", source);
   }
 
   if (eventType) {
@@ -118,13 +124,19 @@ export default async function RequestsPage({ searchParams }: RequestsPageProps) 
 
   return (
     <AdminShell>
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight text-[#0A5458]">Αιτήματα προσφοράς</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-[#5f594f]">
             Διαχείριση ενδιαφέροντος, προσφορών και κλεισμένων εκδηλώσεων.
           </p>
         </div>
+        <Link
+          className="inline-flex w-fit rounded-full bg-[#0A5458] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#07383b]"
+          href="/admin/requests/new"
+        >
+          Νέα εγγραφή
+        </Link>
       </div>
 
       <div className="mt-6 flex flex-wrap gap-2">
@@ -184,6 +196,21 @@ export default async function RequestsPage({ searchParams }: RequestsPageProps) 
               {eventTypes.map((type) => (
                 <option key={type} value={type}>
                   {type}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="text-sm font-semibold text-[#0A5458]">
+            Πηγή
+            <select
+              className="mt-2 w-full rounded-xl border border-[#d9b76f]/30 px-3 py-2 text-sm outline-none focus:border-[#0A5458]"
+              defaultValue={isQuoteRequestSource(source) ? source : ""}
+              name="source"
+            >
+              <option value="">Όλες</option>
+              {quoteRequestSources.map((sourceValue) => (
+                <option key={sourceValue} value={sourceValue}>
+                  {sourceLabels[sourceValue]}
                 </option>
               ))}
             </select>
@@ -268,6 +295,7 @@ export default async function RequestsPage({ searchParams }: RequestsPageProps) 
               <tr>
                 <th className="px-4 py-3">Ημερομηνία αιτήματος</th>
                 <th className="px-4 py-3">Κατάσταση</th>
+                <th className="px-4 py-3">Πηγή</th>
                 <th className="px-4 py-3">Όνομα</th>
                 <th className="px-4 py-3">Τηλέφωνο</th>
                 <th className="px-4 py-3">Email</th>
@@ -292,6 +320,7 @@ export default async function RequestsPage({ searchParams }: RequestsPageProps) 
                       {statusLabels[request.status]}
                     </span>
                   </td>
+                  <td className="whitespace-nowrap px-4 py-3">{getSourceLabel(request.source)}</td>
                   <td className="whitespace-nowrap px-4 py-3 font-semibold">{request.name}</td>
                   <td className="whitespace-nowrap px-4 py-3">{request.phone}</td>
                   <td className="whitespace-nowrap px-4 py-3">{request.email}</td>
@@ -305,7 +334,7 @@ export default async function RequestsPage({ searchParams }: RequestsPageProps) 
               ))}
               {requests.length === 0 ? (
                 <tr>
-                  <td className="px-4 py-10 text-center text-sm text-[#5f594f]" colSpan={11}>
+                  <td className="px-4 py-10 text-center text-sm text-[#5f594f]" colSpan={12}>
                     Δεν βρέθηκαν αιτήματα με αυτά τα φίλτρα.
                   </td>
                 </tr>

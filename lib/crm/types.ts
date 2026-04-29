@@ -8,14 +8,23 @@ export type QuoteRequestStatus =
   | "LOST"
   | "CANCELLED";
 
+export type QuoteRequestSource =
+  | "website"
+  | "phone"
+  | "email"
+  | "instagram"
+  | "facebook"
+  | "referral"
+  | "other";
+
 export type QuoteRequest = {
   id: string;
   created_at: string;
   updated_at: string;
   status: QuoteRequestStatus;
   name: string;
-  phone: string;
-  email: string;
+  phone: string | null;
+  email: string | null;
   event_type: string;
   event_date: string | null;
   location: string | null;
@@ -28,7 +37,7 @@ export type QuoteRequest = {
   final_guest_count: number | null;
   final_total: number | null;
   deposit_amount: number | null;
-  source: string;
+  source: QuoteRequestSource;
   utm_source: string | null;
   utm_medium: string | null;
   utm_campaign: string | null;
@@ -42,8 +51,8 @@ export type QuoteRequest = {
 export type QuoteRequestInsert = {
   status?: QuoteRequestStatus;
   name: string;
-  phone: string;
-  email: string;
+  phone?: string | null;
+  email?: string | null;
   event_type: string;
   event_date?: string | null;
   location?: string | null;
@@ -56,7 +65,7 @@ export type QuoteRequestInsert = {
   final_guest_count?: number | null;
   final_total?: number | null;
   deposit_amount?: number | null;
-  source?: string;
+  source?: QuoteRequestSource;
   utm_source?: string | null;
   utm_medium?: string | null;
   utm_campaign?: string | null;
