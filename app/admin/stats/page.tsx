@@ -70,6 +70,8 @@ export default async function StatsPage() {
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const totalRequests = requests.length;
   const newRequests = requests.filter((request) => request.status === "NEW").length;
+  const individualRequests = requests.filter((request) => request.customer_type !== "business").length;
+  const businessRequests = requests.filter((request) => request.customer_type === "business").length;
   const requestsThisMonth = requests.filter((request) => new Date(request.created_at) >= monthStart).length;
   const wonRequests = requests.filter((request) => request.status === "WON");
   const lostRequests = requests.filter((request) => request.status === "LOST");
@@ -153,6 +155,8 @@ export default async function StatsPage() {
       <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Σύνολο αιτημάτων" value={formatNumber(totalRequests)} />
         <StatCard label="Νέα αιτήματα" value={formatNumber(newRequests)} />
+        <StatCard label="Αιτήματα ιδιωτών" value={formatNumber(individualRequests)} />
+        <StatCard label="Αιτήματα επιχειρήσεων" value={formatNumber(businessRequests)} />
         <StatCard label="Αιτήματα αυτόν τον μήνα" value={formatNumber(requestsThisMonth)} />
         <StatCard label="Κλεισμένες εκδηλώσεις" value={formatNumber(wonRequests.length)} />
         <StatCard label="Χαμένα αιτήματα" value={formatNumber(lostRequests.length)} />

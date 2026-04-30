@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { updateQuoteRequest } from "@/app/admin/requests/[id]/actions";
 import { AdminShell } from "@/components/AdminShell";
 import { requireAdminSession } from "@/lib/adminAuth";
+import { getCustomerTypeLabel } from "@/lib/crm/customerType";
 import { formatCurrency, formatDate, formatDateTime, formatNumber, toDateTimeLocalValue } from "@/lib/crm/formatters";
 import { getSourceLabel } from "@/lib/crm/source";
 import { quoteRequestStatuses, statusLabels, statusToneClasses } from "@/lib/crm/status";
@@ -70,6 +71,10 @@ export default async function RequestDetailPage({ params, searchParams }: Reques
 
   const request = data as QuoteRequest;
   const saveAction = updateQuoteRequest.bind(null, request.id);
+  const customerType = request.customer_type === "business" ? "business" : "individual";
+  const contactName = request.contact_name || request.name;
+  const contactPhone = request.contact_phone || request.phone;
+  const contactEmail = request.contact_email || request.email;
 
   return (
     <AdminShell>
@@ -106,15 +111,42 @@ export default async function RequestDetailPage({ params, searchParams }: Reques
 
       <div className="mt-6 grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
         <div className="space-y-6">
-          <section className="rounded-2xl border border-[#d9b76f]/25 bg-white/85 p-5 shadow-lg shadow-[#0A5458]/5">
-            <h2 className="text-xl font-semibold text-[#0A5458]">Στοιχεία πελάτη</h2>
-            <dl className="mt-4 grid gap-3">
-              <ReadOnlyField label="Όνομα" value={request.name} />
-              <ReadOnlyField label="Τηλέφωνο" value={request.phone} />
-              <ReadOnlyField label="Email" value={request.email} />
-              <ReadOnlyField label="Πηγή" value={getSourceLabel(request.source)} />
-            </dl>
-          </section>
+          {customerType === "individual" ? (
+            <section className="rounded-2xl border border-[#d9b76f]/25 bg-white/85 p-5 shadow-lg shadow-[#0A5458]/5">
+              <h2 className="text-xl font-semibold text-[#0A5458]">Στοιχεία πελάτη</h2>
+              <dl className="mt-4 grid gap-3">
+                <ReadOnlyField label="Τύπος πελάτη" value={getCustomerTypeLabel(customerType)} />
+                <ReadOnlyField label="Όνομα" value={request.name} />
+                <ReadOnlyField label="Τηλέφωνο" value={request.phone} />
+                <ReadOnlyField label="Email" value={request.email} />
+                <ReadOnlyField label="Πηγή" value={getSourceLabel(request.source)} />
+              </dl>
+            </section>
+          ) : (
+            <>
+              <section className="rounded-2xl border border-[#d9b76f]/25 bg-white/85 p-5 shadow-lg shadow-[#0A5458]/5">
+                <h2 className="text-xl font-semibold text-[#0A5458]">Στοιχεία επιχείρησης</h2>
+                <dl className="mt-4 grid gap-3">
+                  <ReadOnlyField label="Τύπος πελάτη" value={getCustomerTypeLabel(customerType)} />
+                  <ReadOnlyField label="Επωνυμία" value={request.business_name || request.name} />
+                  <ReadOnlyField label="ΑΦΜ" value={request.business_vat} />
+                  <ReadOnlyField label="ΔΟΥ" value={request.business_tax_office} />
+                  <ReadOnlyField label="Διεύθυνση" value={request.business_address} />
+                  <ReadOnlyField label="Έκδοση τιμολογίου" value={request.invoice_required ? "Ναι" : "Όχι"} />
+                  <ReadOnlyField label="Πηγή" value={getSourceLabel(request.source)} />
+                </dl>
+              </section>
+
+              <section className="rounded-2xl border border-[#d9b76f]/25 bg-white/85 p-5 shadow-lg shadow-[#0A5458]/5">
+                <h2 className="text-xl font-semibold text-[#0A5458]">Στοιχεία επαφής</h2>
+                <dl className="mt-4 grid gap-3">
+                  <ReadOnlyField label="Όνομα επαφής" value={contactName} />
+                  <ReadOnlyField label="Τηλέφωνο" value={contactPhone} />
+                  <ReadOnlyField label="Email" value={contactEmail} />
+                </dl>
+              </section>
+            </>
+          )}
 
           <section className="rounded-2xl border border-[#d9b76f]/25 bg-white/85 p-5 shadow-lg shadow-[#0A5458]/5">
             <h2 className="text-xl font-semibold text-[#0A5458]">Στοιχεία εκδήλωσης</h2>

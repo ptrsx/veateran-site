@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { requireAdminSession } from "@/lib/adminAuth";
+import { isQuoteRequestCustomerType } from "@/lib/crm/customerType";
 import { isQuoteRequestSource } from "@/lib/crm/source";
 import { isQuoteRequestStatus } from "@/lib/crm/status";
 import type { QuoteRequestInsert } from "@/lib/crm/types";
@@ -57,25 +58,25 @@ function getNullablePositiveInteger(formData: FormData, key: string) {
 export async function createManualQuoteRequest(formData: FormData) {
   await requireAdminSession();
 
-  const name = getString(formData, "name");
-  const phone = getNullableString(formData, "phone");
-  const email = getNullableString(formData, "email");
+  const customerType = getString(formData, "customer_type") || "individual";
   const eventType = getString(formData, "event_type");
   const source = getString(formData, "source");
   const status = getString(formData, "status");
 
-  if (!name || !eventType || (!phone && !email) || !isQuoteRequestSource(source) || !isQuoteRequestStatus(status)) {
+  if (
+    !isQuoteRequestCustomerType(customerType) ||
+    !eventType ||
+    !isQuoteRequestSource(source) ||
+    !isQuoteRequestStatus(status)
+  ) {
     redirect("/admin/requests/new?error=1");
   }
 
   let quoteRequest: QuoteRequestInsert;
 
   try {
-    quoteRequest = {
+    const commonFields = {
       status,
-      name,
-      phone,
-      email,
       event_type: eventType,
       event_date: getNullableString(formData, "event_date"),
       location: getNullableString(formData, "location"),
@@ -91,6 +92,66 @@ export async function createManualQuoteRequest(formData: FormData) {
       source,
       next_follow_up_at: getNullableString(formData, "next_follow_up_at"),
     };
+
+    if (customerType === "individual") {
+      const name = getString(formData, "name");
+      const phone = getNullableString(formData, "phone");
+      const email = getNullableString(formData, "email");
+
+      if (!name || (!phone && !email)) {
+        throw new Error("Invalid individual customer fields.");
+      }
+
+      quoteRequest = {
+        ...commonFields,
+        customer_type: "individual",
+        name,
+        phone,
+        email,
+        business_name: null,
+        business_vat: null,
+        business_tax_office: null,
+        business_address: null,
+        contact_name: null,
+        contact_phone: null,
+        contact_email: null,
+        invoice_required: false,
+      };
+    } else {
+      const businessName = getString(formData, "business_name");
+      const businessVat = getNullableString(formData, "business_vat");
+      const businessTaxOffice = getNullableString(formData, "business_tax_office");
+      const businessAddress = getNullableString(formData, "business_address");
+      const contactName = getString(formData, "contact_name");
+      const contactPhone = getNullableString(formData, "contact_phone");
+      const contactEmail = getNullableString(formData, "contact_email");
+      const invoiceRequired = formData.get("invoice_required") === "1";
+
+      if (
+        !businessName ||
+        !contactName ||
+        (!contactPhone && !contactEmail) ||
+        (invoiceRequired && (!businessVat || !businessTaxOffice || !businessAddress))
+      ) {
+        throw new Error("Invalid business customer fields.");
+      }
+
+      quoteRequest = {
+        ...commonFields,
+        customer_type: "business",
+        name: contactName,
+        phone: contactPhone,
+        email: contactEmail,
+        business_name: businessName,
+        business_vat: businessVat,
+        business_tax_office: businessTaxOffice,
+        business_address: businessAddress,
+        contact_name: contactName,
+        contact_phone: contactPhone,
+        contact_email: contactEmail,
+        invoice_required: invoiceRequired,
+      };
+    }
   } catch {
     redirect("/admin/requests/new?error=1");
   }

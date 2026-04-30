@@ -17,14 +17,25 @@ export type QuoteRequestSource =
   | "referral"
   | "other";
 
+export type QuoteRequestCustomerType = "individual" | "business";
+
 export type QuoteRequest = {
   id: string;
   created_at: string;
   updated_at: string;
   status: QuoteRequestStatus;
+  customer_type: QuoteRequestCustomerType;
   name: string;
   phone: string | null;
   email: string | null;
+  business_name: string | null;
+  business_vat: string | null;
+  business_tax_office: string | null;
+  business_address: string | null;
+  contact_name: string | null;
+  contact_phone: string | null;
+  contact_email: string | null;
+  invoice_required: boolean;
   event_type: string;
   event_date: string | null;
   location: string | null;
@@ -50,9 +61,18 @@ export type QuoteRequest = {
 
 export type QuoteRequestInsert = {
   status?: QuoteRequestStatus;
+  customer_type?: QuoteRequestCustomerType;
   name: string;
   phone?: string | null;
   email?: string | null;
+  business_name?: string | null;
+  business_vat?: string | null;
+  business_tax_office?: string | null;
+  business_address?: string | null;
+  contact_name?: string | null;
+  contact_phone?: string | null;
+  contact_email?: string | null;
+  invoice_required?: boolean;
   event_type: string;
   event_date?: string | null;
   location?: string | null;

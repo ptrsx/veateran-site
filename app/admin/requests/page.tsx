@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { AdminShell } from "@/components/AdminShell";
 import { requireAdminSession } from "@/lib/adminAuth";
+import { customerTypeLabels, getCustomerTypeLabel, isQuoteRequestCustomerType, quoteRequestCustomerTypes } from "@/lib/crm/customerType";
 import { formatCurrency, formatDate, formatDateTime, formatNumber } from "@/lib/crm/formatters";
 import { getSourceLabel, isQuoteRequestSource, quoteRequestSources, sourceLabels } from "@/lib/crm/source";
 import { isQuoteRequestStatus, statusLabels, statusToneClasses } from "@/lib/crm/status";
@@ -64,6 +65,7 @@ export default async function RequestsPage({ searchParams }: RequestsPageProps) 
   const search = getParam(params, "search");
   const status = getParam(params, "status");
   const source = getParam(params, "source");
+  const customerType = getParam(params, "customerType");
   const eventType = getParam(params, "eventType");
   const minGuests = getParam(params, "minGuests");
   const maxGuests = getParam(params, "maxGuests");
@@ -77,7 +79,9 @@ export default async function RequestsPage({ searchParams }: RequestsPageProps) 
 
   if (search) {
     const escapedSearch = search.replaceAll("%", "\\%").replaceAll(",", "\\,");
-    query = query.or(`name.ilike.%${escapedSearch}%,email.ilike.%${escapedSearch}%,phone.ilike.%${escapedSearch}%`);
+    query = query.or(
+      `name.ilike.%${escapedSearch}%,email.ilike.%${escapedSearch}%,phone.ilike.%${escapedSearch}%,business_name.ilike.%${escapedSearch}%,business_vat.ilike.%${escapedSearch}%,contact_name.ilike.%${escapedSearch}%,contact_email.ilike.%${escapedSearch}%,contact_phone.ilike.%${escapedSearch}%`,
+    );
   }
 
   if (isQuoteRequestStatus(status)) {
@@ -86,6 +90,10 @@ export default async function RequestsPage({ searchParams }: RequestsPageProps) 
 
   if (isQuoteRequestSource(source)) {
     query = query.eq("source", source);
+  }
+
+  if (isQuoteRequestCustomerType(customerType)) {
+    query = query.eq("customer_type", customerType);
   }
 
   if (eventType) {
@@ -216,6 +224,21 @@ export default async function RequestsPage({ searchParams }: RequestsPageProps) 
             </select>
           </label>
           <label className="text-sm font-semibold text-[#0A5458]">
+            Τύπος πελάτη
+            <select
+              className="mt-2 w-full rounded-xl border border-[#d9b76f]/30 px-3 py-2 text-sm outline-none focus:border-[#0A5458]"
+              defaultValue={isQuoteRequestCustomerType(customerType) ? customerType : ""}
+              name="customerType"
+            >
+              <option value="">Όλοι</option>
+              {quoteRequestCustomerTypes.map((type) => (
+                <option key={type} value={type}>
+                  {customerTypeLabels[type]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="text-sm font-semibold text-[#0A5458]">
             Ελάχιστα άτομα
             <input
               className="mt-2 w-full rounded-xl border border-[#d9b76f]/30 px-3 py-2 text-sm outline-none focus:border-[#0A5458]"
@@ -296,6 +319,7 @@ export default async function RequestsPage({ searchParams }: RequestsPageProps) 
                 <th className="px-4 py-3">Ημερομηνία αιτήματος</th>
                 <th className="px-4 py-3">Κατάσταση</th>
                 <th className="px-4 py-3">Πηγή</th>
+                <th className="px-4 py-3">Τύπος</th>
                 <th className="px-4 py-3">Όνομα</th>
                 <th className="px-4 py-3">Τηλέφωνο</th>
                 <th className="px-4 py-3">Email</th>
@@ -308,33 +332,44 @@ export default async function RequestsPage({ searchParams }: RequestsPageProps) 
               </tr>
             </thead>
             <tbody className="divide-y divide-[#d9b76f]/15">
-              {requests.map((request) => (
-                <tr className="transition hover:bg-[#fff7e6]" key={request.id}>
-                  <td className="whitespace-nowrap px-4 py-3">
-                    <Link className="font-semibold text-[#0A5458]" href={`/admin/requests/${request.id}`}>
-                      {formatDateTime(request.created_at)}
-                    </Link>
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3">
-                    <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${statusToneClasses[request.status]}`}>
-                      {statusLabels[request.status]}
-                    </span>
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3">{getSourceLabel(request.source)}</td>
-                  <td className="whitespace-nowrap px-4 py-3 font-semibold">{request.name}</td>
-                  <td className="whitespace-nowrap px-4 py-3">{request.phone}</td>
-                  <td className="whitespace-nowrap px-4 py-3">{request.email}</td>
-                  <td className="whitespace-nowrap px-4 py-3">{request.event_type}</td>
-                  <td className="whitespace-nowrap px-4 py-3">{formatDate(request.event_date)}</td>
-                  <td className="whitespace-nowrap px-4 py-3">{request.location || "-"}</td>
-                  <td className="whitespace-nowrap px-4 py-3">{formatNumber(request.guest_count)}</td>
-                  <td className="whitespace-nowrap px-4 py-3">{formatCurrency(request.quoted_total)}</td>
-                  <td className="whitespace-nowrap px-4 py-3">{formatCurrency(request.final_total)}</td>
-                </tr>
-              ))}
+              {requests.map((request) => {
+                const isBusiness = request.customer_type === "business";
+                const displayName = isBusiness ? request.business_name || request.name : request.name;
+
+                return (
+                  <tr className="transition hover:bg-[#fff7e6]" key={request.id}>
+                    <td className="whitespace-nowrap px-4 py-3">
+                      <Link className="font-semibold text-[#0A5458]" href={`/admin/requests/${request.id}`}>
+                        {formatDateTime(request.created_at)}
+                      </Link>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3">
+                      <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${statusToneClasses[request.status]}`}>
+                        {statusLabels[request.status]}
+                      </span>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3">{getSourceLabel(request.source)}</td>
+                    <td className="whitespace-nowrap px-4 py-3">{getCustomerTypeLabel(request.customer_type)}</td>
+                    <td className="whitespace-nowrap px-4 py-3">
+                      <span className="font-semibold">{displayName}</span>
+                      {isBusiness && request.contact_name ? (
+                        <span className="mt-1 block text-xs font-medium text-[#5f594f]">Επαφή: {request.contact_name}</span>
+                      ) : null}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3">{request.phone}</td>
+                    <td className="whitespace-nowrap px-4 py-3">{request.email}</td>
+                    <td className="whitespace-nowrap px-4 py-3">{request.event_type}</td>
+                    <td className="whitespace-nowrap px-4 py-3">{formatDate(request.event_date)}</td>
+                    <td className="whitespace-nowrap px-4 py-3">{request.location || "-"}</td>
+                    <td className="whitespace-nowrap px-4 py-3">{formatNumber(request.guest_count)}</td>
+                    <td className="whitespace-nowrap px-4 py-3">{formatCurrency(request.quoted_total)}</td>
+                    <td className="whitespace-nowrap px-4 py-3">{formatCurrency(request.final_total)}</td>
+                  </tr>
+                );
+              })}
               {requests.length === 0 ? (
                 <tr>
-                  <td className="px-4 py-10 text-center text-sm text-[#5f594f]" colSpan={12}>
+                  <td className="px-4 py-10 text-center text-sm text-[#5f594f]" colSpan={13}>
                     Δεν βρέθηκαν αιτήματα με αυτά τα φίλτρα.
                   </td>
                 </tr>

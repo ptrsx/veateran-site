@@ -165,9 +165,11 @@ export async function POST(request: Request) {
 
   const quoteRequest: QuoteRequestInsert = {
     status: "NEW",
+    customer_type: "individual",
     name: values.name,
     phone: values.phone,
     email: values.email,
+    invoice_required: false,
     event_type: values.eventType,
     event_date: getNullableString(values.eventDate),
     location: getNullableString(values.eventLocation),
