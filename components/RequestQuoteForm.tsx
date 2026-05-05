@@ -335,7 +335,7 @@ export function RequestQuoteForm() {
             <span>
               <span className="block text-lg font-semibold">Επιλέξτε το δικό σας μενού</span>
               <span className="mt-1 block text-sm leading-6 text-[#5f594f]">
-                Προαιρετικά, επίλεξε όσα σε ενδιαφέρουν ώστε να ετοιμάσουμε πιο στοχευμένη προσφορά.
+                Προαιρετικά, επίλεξε όσα σας ενδιαφέρουν ώστε να ετοιμάσουμε πιο στοχευμένη προσφορά.
               </span>
             </span>
             <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#0A5458] text-lg font-bold text-white">

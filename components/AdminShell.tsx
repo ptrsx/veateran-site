@@ -15,6 +15,9 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             <Link className="rounded-full px-4 py-2 transition hover:bg-[#0A5458]/10" href="/admin/requests">
               Αιτήματα
             </Link>
+            <Link className="rounded-full px-4 py-2 transition hover:bg-[#0A5458]/10" href="/admin/products">
+              Προϊόντα
+            </Link>
             <Link className="rounded-full px-4 py-2 transition hover:bg-[#0A5458]/10" href="/admin/stats">
               Στατιστικά
             </Link>
