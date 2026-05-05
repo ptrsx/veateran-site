@@ -2,11 +2,13 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { updateQuoteRequest } from "@/app/admin/requests/[id]/actions";
+import { generateQuoteForRequest } from "@/app/admin/requests/[id]/quote-actions";
 import { AdminShell } from "@/components/AdminShell";
 import { requireAdminSession } from "@/lib/adminAuth";
 import { getCustomerTypeLabel } from "@/lib/crm/customerType";
 import { formatCurrency, formatDate, formatDateTime, formatNumber, toDateTimeLocalValue } from "@/lib/crm/formatters";
 import { groupQuoteMenuItems, normalizeSelectedMenuItems, quoteMenuCategoryLabels, type QuoteMenuItemCategory } from "@/lib/crm/menuItems";
+import { getQuoteStatusLabel, quoteStatusToneClasses, type QuoteStatus } from "@/lib/crm/quotes";
 import { getSourceLabel } from "@/lib/crm/source";
 import { quoteRequestStatuses, statusLabels, statusToneClasses } from "@/lib/crm/status";
 import type { QuoteRequest } from "@/lib/crm/types";
@@ -20,10 +22,20 @@ type RequestDetailPageProps = {
     saved?: string;
     created?: string;
     error?: string;
+    quoteError?: string;
   }>;
 };
 
 const menuCategories: QuoteMenuItemCategory[] = ["food", "drinks"];
+
+type RequestQuoteSummary = {
+  id: string;
+  quote_number: string;
+  status: QuoteStatus;
+  total_gross: number;
+  created_at: string;
+  sent_at: string | null;
+};
 
 function ReadOnlyField({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -80,6 +92,20 @@ export default async function RequestDetailPage({ params, searchParams }: Reques
   const contactEmail = request.contact_email || request.email;
   const selectedMenuItems = normalizeSelectedMenuItems(request.selected_menu_items);
   const groupedMenuItems = groupQuoteMenuItems(selectedMenuItems);
+  const createQuoteAction = generateQuoteForRequest.bind(null, request.id);
+  const { data: quoteData, error: quotesError } = await supabase
+    .from("quotes")
+    .select("id, quote_number, status, total_gross, created_at, sent_at")
+    .eq("request_id", request.id)
+    .order("created_at", { ascending: false });
+  const quotes = (quoteData ?? []).map((quote) => ({
+    id: String(quote.id),
+    quote_number: String(quote.quote_number),
+    status: quote.status as QuoteStatus,
+    total_gross: Number(quote.total_gross) || 0,
+    created_at: String(quote.created_at),
+    sent_at: typeof quote.sent_at === "string" ? quote.sent_at : null,
+  })) satisfies RequestQuoteSummary[];
 
   return (
     <AdminShell>
@@ -111,6 +137,11 @@ export default async function RequestDetailPage({ params, searchParams }: Reques
       {messages.error === "1" ? (
         <p className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-800">
           Δεν ήταν δυνατή η αποθήκευση των αλλαγών.
+        </p>
+      ) : null}
+      {messages.quoteError === "1" || quotesError ? (
+        <p className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-800">
+          Δεν ήταν δυνατή η δημιουργία ή φόρτωση προσφοράς.
         </p>
       ) : null}
 
@@ -188,6 +219,56 @@ export default async function RequestDetailPage({ params, searchParams }: Reques
                       </ul>
                     </div>
                   ))}
+              </div>
+            )}
+          </section>
+
+          <section className="rounded-2xl border border-[#d9b76f]/25 bg-white/85 p-5 shadow-lg shadow-[#0A5458]/5">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <h2 className="text-xl font-semibold text-[#0A5458]">Προσφορές</h2>
+              <form action={createQuoteAction}>
+                <button className="rounded-full bg-[#0A5458] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#07383b]" type="submit">
+                  Δημιουργία προσφοράς
+                </button>
+              </form>
+            </div>
+
+            {quotes.length === 0 ? (
+              <p className="mt-4 rounded-xl border border-[#d9b76f]/20 bg-[#fffaf0]/70 p-4 text-sm leading-6 text-[#5f594f]">
+                Δεν έχει δημιουργηθεί προσφορά για αυτό το αίτημα.
+              </p>
+            ) : (
+              <div className="mt-4 overflow-hidden rounded-xl border border-[#d9b76f]/20">
+                <table className="min-w-full divide-y divide-[#d9b76f]/20 text-left text-sm">
+                  <thead className="bg-[#f8f2e5] text-xs font-bold uppercase tracking-wide text-[#0A5458]">
+                    <tr>
+                      <th className="px-3 py-2">Αριθμός</th>
+                      <th className="px-3 py-2">Κατάσταση</th>
+                      <th className="px-3 py-2">Σύνολο</th>
+                      <th className="px-3 py-2">Δημιουργία</th>
+                      <th className="px-3 py-2">Αποστολή</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#d9b76f]/15 bg-white/70">
+                    {quotes.map((quote) => (
+                      <tr key={quote.id}>
+                        <td className="whitespace-nowrap px-3 py-2">
+                          <Link className="font-semibold text-[#0A5458] hover:underline" href={`/admin/quotes/${quote.id}`}>
+                            {quote.quote_number}
+                          </Link>
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-2">
+                          <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${quoteStatusToneClasses[quote.status]}`}>
+                            {getQuoteStatusLabel(quote.status)}
+                          </span>
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-2">{formatCurrency(quote.total_gross)}</td>
+                        <td className="whitespace-nowrap px-3 py-2">{formatDateTime(quote.created_at)}</td>
+                        <td className="whitespace-nowrap px-3 py-2">{formatDateTime(quote.sent_at)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </section>

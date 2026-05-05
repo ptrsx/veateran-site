@@ -8,6 +8,7 @@ export type QuoteProduct = {
   updated_at: string;
   name: string;
   category: QuoteProductCategory;
+  product_key: string | null;
   unit: QuoteProductUnit;
   price_net: number;
   vat_rate: number;

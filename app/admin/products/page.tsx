@@ -20,6 +20,7 @@ function normalizeProduct(product: Record<string, unknown>): QuoteProduct {
     updated_at: String(product.updated_at),
     name: String(product.name),
     category: String(product.category) as QuoteProduct["category"],
+    product_key: typeof product.product_key === "string" ? product.product_key : null,
     unit: String(product.unit) as QuoteProduct["unit"],
     price_net: Number(product.price_net) || 0,
     vat_rate: Number(product.vat_rate) || 0,
