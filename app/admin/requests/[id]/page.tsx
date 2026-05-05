@@ -6,6 +6,7 @@ import { AdminShell } from "@/components/AdminShell";
 import { requireAdminSession } from "@/lib/adminAuth";
 import { getCustomerTypeLabel } from "@/lib/crm/customerType";
 import { formatCurrency, formatDate, formatDateTime, formatNumber, toDateTimeLocalValue } from "@/lib/crm/formatters";
+import { groupQuoteMenuItems, normalizeSelectedMenuItems, quoteMenuCategoryLabels, type QuoteMenuItemCategory } from "@/lib/crm/menuItems";
 import { getSourceLabel } from "@/lib/crm/source";
 import { quoteRequestStatuses, statusLabels, statusToneClasses } from "@/lib/crm/status";
 import type { QuoteRequest } from "@/lib/crm/types";
@@ -21,6 +22,8 @@ type RequestDetailPageProps = {
     error?: string;
   }>;
 };
+
+const menuCategories: QuoteMenuItemCategory[] = ["food", "drinks"];
 
 function ReadOnlyField({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -75,6 +78,8 @@ export default async function RequestDetailPage({ params, searchParams }: Reques
   const contactName = request.contact_name || request.name;
   const contactPhone = request.contact_phone || request.phone;
   const contactEmail = request.contact_email || request.email;
+  const selectedMenuItems = normalizeSelectedMenuItems(request.selected_menu_items);
+  const groupedMenuItems = groupQuoteMenuItems(selectedMenuItems);
 
   return (
     <AdminShell>
@@ -159,6 +164,32 @@ export default async function RequestDetailPage({ params, searchParams }: Reques
               <ReadOnlyField label="Σημειώσεις πελάτη" value={request.notes || "Δεν συμπληρώθηκαν"} />
               <ReadOnlyField label="Ημερομηνία αιτήματος" value={formatDateTime(request.created_at)} />
             </dl>
+          </section>
+
+          <section className="rounded-2xl border border-[#d9b76f]/25 bg-white/85 p-5 shadow-lg shadow-[#0A5458]/5">
+            <h2 className="text-xl font-semibold text-[#0A5458]">Επιλογές μενού</h2>
+            {selectedMenuItems.length === 0 ? (
+              <p className="mt-4 rounded-xl border border-[#d9b76f]/20 bg-[#fffaf0]/70 p-4 text-sm leading-6 text-[#5f594f]">
+                Δεν έχουν επιλεγεί προϊόντα.
+              </p>
+            ) : (
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
+                {menuCategories
+                  .filter((category) => groupedMenuItems[category].length > 0)
+                  .map((category) => (
+                    <div className="rounded-xl border border-[#d9b76f]/20 bg-[#fffaf0]/70 p-4" key={category}>
+                      <h3 className="text-xs font-bold uppercase tracking-wide text-[#0A5458]">
+                        {quoteMenuCategoryLabels[category]}
+                      </h3>
+                      <ul className="mt-3 space-y-2 text-sm leading-6 text-[#2f2b25]">
+                        {groupedMenuItems[category].map((item) => (
+                          <li key={item.id}>{item.label}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+              </div>
+            )}
           </section>
         </div>
 

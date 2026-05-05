@@ -19,6 +19,12 @@ export type QuoteRequestSource =
 
 export type QuoteRequestCustomerType = "individual" | "business";
 
+export type QuoteRequestSelectedMenuItem = {
+  id: string;
+  label: string;
+  category: "food" | "drinks";
+};
+
 export type QuoteRequest = {
   id: string;
   created_at: string;
@@ -36,6 +42,7 @@ export type QuoteRequest = {
   contact_phone: string | null;
   contact_email: string | null;
   invoice_required: boolean;
+  selected_menu_items: QuoteRequestSelectedMenuItem[];
   event_type: string;
   event_date: string | null;
   location: string | null;
@@ -73,6 +80,7 @@ export type QuoteRequestInsert = {
   contact_phone?: string | null;
   contact_email?: string | null;
   invoice_required?: boolean;
+  selected_menu_items?: QuoteRequestSelectedMenuItem[];
   event_type: string;
   event_date?: string | null;
   location?: string | null;
