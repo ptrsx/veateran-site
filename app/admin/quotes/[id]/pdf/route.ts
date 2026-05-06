@@ -13,6 +13,16 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
 
+const brand = {
+  teal: "#0A5458",
+  ivory: "#fffaf0",
+  softGold: "#d9b76f",
+  paleGold: "#eadbb8",
+  darkText: "#2f2b25",
+  mutedText: "#6d6558",
+  termsText: "#5f594f",
+};
+
 let fontsConfigured = false;
 
 function configureFonts() {
@@ -95,7 +105,7 @@ function detailLine(label: string, value?: string | number | null) {
 
   return {
     text: [
-      { text: `${label}: `, bold: true, color: "#0A5458" },
+      { text: `${label}: `, bold: true, color: brand.teal },
       String(value),
     ],
     margin: [0, 0, 0, 4],
@@ -104,6 +114,68 @@ function detailLine(label: string, value?: string | number | null) {
 
 function compactContent(items: Array<Content | null>) {
   return items.filter((item): item is Content => item !== null);
+}
+
+function getPageBackground() {
+  return {
+    table: {
+      widths: [595],
+      heights: [842],
+      body: [[""]],
+    },
+    layout: {
+      hLineWidth: () => 0,
+      vLineWidth: () => 0,
+      paddingTop: () => 0,
+      paddingBottom: () => 0,
+      paddingLeft: () => 0,
+      paddingRight: () => 0,
+      fillColor: () => brand.ivory,
+    },
+  } satisfies Content;
+}
+
+function getGoldDivider() {
+  return {
+    table: {
+      widths: ["*"],
+      heights: [1],
+      body: [[""]],
+    },
+    layout: {
+      hLineWidth: (rowIndex: number) => (rowIndex === 0 ? 1 : 0),
+      vLineWidth: () => 0,
+      hLineColor: () => brand.softGold,
+      paddingTop: () => 0,
+      paddingBottom: () => 0,
+      paddingLeft: () => 0,
+      paddingRight: () => 0,
+    },
+    margin: [0, 22, 0, 18],
+  } satisfies Content;
+}
+
+function assertCanvasValuesAreArrays(value: unknown, pathName = "documentDefinition") {
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => assertCanvasValuesAreArrays(item, `${pathName}[${index}]`));
+    return;
+  }
+
+  if (!value || typeof value !== "object") {
+    return;
+  }
+
+  const record = value as Record<string, unknown>;
+
+  if ("canvas" in record && !Array.isArray(record.canvas)) {
+    throw new Error(`Invalid pdfmake canvas at ${pathName}.canvas. Expected an array.`);
+  }
+
+  for (const [key, child] of Object.entries(record)) {
+    if (typeof child !== "function") {
+      assertCanvasValuesAreArrays(child, `${pathName}.${key}`);
+    }
+  }
 }
 
 function getCustomerContent(quote: Quote) {
@@ -146,7 +218,7 @@ function getItemsTable(items: QuoteItem[]) {
       {
         stack: compactContent([
           { text: item.product_name, bold: true },
-          item.notes ? { text: item.notes, color: "#6d6558", fontSize: 8, margin: [0, 2, 0, 0] } : null,
+          item.notes ? { text: item.notes, color: brand.mutedText, fontSize: 8, margin: [0, 2, 0, 0] } : null,
         ]),
       },
       quoteProductCategoryLabels[item.category],
@@ -165,9 +237,9 @@ function getItemsTable(items: QuoteItem[]) {
       body,
     },
     layout: {
-      fillColor: (rowIndex: number) => (rowIndex === 0 ? "#0A5458" : rowIndex % 2 === 0 ? "#fffaf0" : null),
-      hLineColor: () => "#eadbb8",
-      vLineColor: () => "#eadbb8",
+      fillColor: (rowIndex: number) => (rowIndex === 0 ? brand.teal : rowIndex % 2 === 0 ? brand.ivory : null),
+      hLineColor: () => brand.paleGold,
+      vLineColor: () => brand.paleGold,
       paddingTop: () => 7,
       paddingBottom: () => 7,
       paddingLeft: () => 7,
@@ -183,19 +255,19 @@ function getDocumentDefinition(quote: Quote, items: QuoteItem[], logoDataUrl: st
     defaultStyle: {
       font: "Roboto",
       fontSize: 9,
-      color: "#2f2b25",
+      color: brand.darkText,
       lineHeight: 1.25,
     },
     styles: {
       title: {
         fontSize: 30,
         bold: true,
-        color: "#0A5458",
+        color: brand.teal,
       },
       sectionTitle: {
         fontSize: 13,
         bold: true,
-        color: "#0A5458",
+        color: brand.teal,
         margin: [0, 0, 0, 8],
       },
       tableHeader: {
@@ -204,26 +276,13 @@ function getDocumentDefinition(quote: Quote, items: QuoteItem[], logoDataUrl: st
         fontSize: 8,
       },
     },
-    background: [
-      {
-        canvas: [
-          {
-            type: "rect",
-            x: 0,
-            y: 0,
-            w: 595,
-            h: 842,
-            color: "#fffaf0",
-          },
-        ],
-      },
-    ],
+    background: getPageBackground(),
     footer: {
       margin: [42, 0, 42, 20],
       columns: [
-        { text: "sales@veateran.gr", color: "#0A5458", bold: true },
-        { text: "+30 6947 005 008", alignment: "center", color: "#0A5458", bold: true },
-        { text: "@theveateran", alignment: "right", color: "#0A5458", bold: true },
+        { text: "sales@veateran.gr", color: brand.teal, bold: true },
+        { text: "+30 6947 005 008", alignment: "center", color: brand.teal, bold: true },
+        { text: "@theveateran", alignment: "right", color: brand.teal, bold: true },
       ],
     },
     content: [
@@ -231,11 +290,11 @@ function getDocumentDefinition(quote: Quote, items: QuoteItem[], logoDataUrl: st
         columns: [
           logoDataUrl
             ? { image: logoDataUrl, width: 62, margin: [0, 0, 18, 0] }
-            : { text: "The VeatERAN Van", bold: true, color: "#0A5458" },
+            : { text: "The VeatERAN Van", bold: true, color: brand.teal },
           {
             stack: [
               { text: "Προσφορά", style: "title" },
-              { text: "The VeatERAN Van", color: "#b08934", bold: true, characterSpacing: 1 },
+              { text: "The VeatERAN Van", color: brand.softGold, bold: true, characterSpacing: 1 },
             ],
           },
           {
@@ -251,20 +310,7 @@ function getDocumentDefinition(quote: Quote, items: QuoteItem[], logoDataUrl: st
         ],
         columnGap: 12,
       },
-      {
-        canvas: [
-          {
-            type: "line",
-            x1: 0,
-            y1: 0,
-            x2: 511,
-            y2: 0,
-            lineColor: "#d9b76f",
-            lineWidth: 1,
-          },
-        ],
-        margin: [0, 22, 0, 18],
-      },
+      getGoldDivider(),
       {
         columns: [
           {
@@ -289,7 +335,7 @@ function getDocumentDefinition(quote: Quote, items: QuoteItem[], logoDataUrl: st
         ? getItemsTable(items)
         : {
             text: "Δεν υπάρχουν γραμμές στην προσφορά.",
-            color: "#6d6558",
+            color: brand.mutedText,
             margin: [0, 0, 0, 12],
           },
       {
@@ -303,14 +349,14 @@ function getDocumentDefinition(quote: Quote, items: QuoteItem[], logoDataUrl: st
                 ["Σύνολο προ ΦΠΑ", { text: formatCurrency(quote.subtotal_net), alignment: "right" }],
                 ["ΦΠΑ", { text: formatCurrency(quote.vat_amount), alignment: "right" }],
                 [
-                  { text: "Σύνολο με ΦΠΑ", bold: true, color: "#0A5458" },
-                  { text: formatCurrency(quote.total_gross), alignment: "right", bold: true, color: "#0A5458" },
+                  { text: "Σύνολο με ΦΠΑ", bold: true, color: brand.teal },
+                  { text: formatCurrency(quote.total_gross), alignment: "right", bold: true, color: brand.teal },
                 ],
               ],
             },
             layout: {
-              hLineColor: () => "#eadbb8",
-              vLineColor: () => "#eadbb8",
+              hLineColor: () => brand.paleGold,
+              vLineColor: () => brand.paleGold,
               paddingTop: () => 7,
               paddingBottom: () => 7,
               paddingLeft: () => 7,
@@ -329,7 +375,7 @@ function getDocumentDefinition(quote: Quote, items: QuoteItem[], logoDataUrl: st
       quote.terms
         ? [
             { text: "Όροι προσφοράς", style: "sectionTitle", margin: [0, 18, 0, 8] },
-            { text: quote.terms, color: "#5f594f" },
+            { text: quote.terms, color: brand.termsText },
           ]
         : [],
     ],
@@ -360,25 +406,47 @@ export async function GET(request: Request, context: RouteContext<"/admin/quotes
     .order("created_at", { ascending: true });
 
   if (itemError) {
+    console.error("Failed to load quote items for quote PDF.", itemError);
     return new Response("Could not load quote items", { status: 500 });
   }
 
-  configureFonts();
-
   const items = (itemData ?? []).map((item) => normalizeQuoteItem(item as Record<string, unknown>));
-  const logoDataUrl = await getLogoDataUrl();
-  const pdf = pdfMake.createPdf(getDocumentDefinition(quote, items, logoDataUrl));
-  const buffer = await pdf.getBuffer();
   const shouldDownload = new URL(request.url).searchParams.get("download") === "1";
   const filename = `veateran-offer-${quote.quote_number}.pdf`;
 
-  await supabase.from("quotes").update({ generated_pdf_at: new Date().toISOString() }).eq("id", quote.id);
+  try {
+    configureFonts();
 
-  return new Response(new Uint8Array(buffer), {
-    headers: {
-      "Content-Type": "application/pdf",
-      "Content-Disposition": `${shouldDownload ? "attachment" : "inline"}; filename="${filename}"`,
-      "Cache-Control": "no-store",
-    },
-  });
+    const logoDataUrl = await getLogoDataUrl();
+    const documentDefinition = getDocumentDefinition(quote, items, logoDataUrl);
+    assertCanvasValuesAreArrays(documentDefinition);
+
+    const pdf = pdfMake.createPdf(documentDefinition);
+    const buffer = await pdf.getBuffer();
+    const { error: pdfTimestampError } = await supabase
+      .from("quotes")
+      .update({ generated_pdf_at: new Date().toISOString() })
+      .eq("id", quote.id);
+
+    if (pdfTimestampError) {
+      console.error("Failed to update quote PDF timestamp.", pdfTimestampError);
+    }
+
+    return new Response(new Uint8Array(buffer), {
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `${shouldDownload ? "attachment" : "inline"}; filename="${filename}"`,
+        "Cache-Control": "no-store",
+      },
+    });
+  } catch (error) {
+    console.error("Failed to generate quote PDF.", error);
+    return new Response("Could not generate quote PDF", {
+      status: 500,
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "no-store",
+      },
+    });
+  }
 }
