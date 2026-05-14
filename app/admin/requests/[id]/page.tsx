@@ -7,7 +7,13 @@ import { AdminShell } from "@/components/AdminShell";
 import { requireAdminSession } from "@/lib/adminAuth";
 import { getCustomerTypeLabel } from "@/lib/crm/customerType";
 import { formatCurrency, formatDate, formatDateTime, formatNumber, toDateTimeLocalValue } from "@/lib/crm/formatters";
-import { groupQuoteMenuItems, normalizeSelectedMenuItems, quoteMenuCategoryLabels, type QuoteMenuItemCategory } from "@/lib/crm/menuItems";
+import {
+  groupQuoteMenuItems,
+  normalizeSelectedMenuItems,
+  quoteMenuCategoryLabels,
+  type QuoteMenuItem,
+  type QuoteMenuItemCategory,
+} from "@/lib/crm/menuItems";
 import { getQuoteStatusLabel, quoteStatusToneClasses, type QuoteStatus } from "@/lib/crm/quotes";
 import { getSourceLabel } from "@/lib/crm/source";
 import { quoteRequestStatuses, statusLabels, statusToneClasses } from "@/lib/crm/status";
@@ -41,7 +47,9 @@ function ReadOnlyField({ label, value }: { label: string; value: React.ReactNode
   return (
     <div className="rounded-xl border border-[#d9b76f]/20 bg-[#fffaf0]/70 p-4">
       <dt className="text-xs font-bold uppercase tracking-wide text-[#0A5458]">{label}</dt>
-      <dd className="mt-2 text-sm leading-6 text-[#2f2b25]">{value || "-"}</dd>
+      <dd className="mt-2 text-sm leading-6 text-[#2f2b25]">
+        {value === null || value === undefined || value === "" ? "-" : value}
+      </dd>
     </div>
   );
 }
@@ -72,6 +80,50 @@ function TextInput({
   );
 }
 
+function getGuestBreakdown(request: QuoteRequest) {
+  const adultGuestCount = request.adult_guest_count ?? request.guest_count;
+  const childGuestCount = request.child_guest_count ?? 0;
+  const totalGuestCount =
+    request.guest_count ??
+    ((adultGuestCount ?? 0) + (childGuestCount ?? 0) || null);
+
+  return {
+    adultGuestCount,
+    childGuestCount,
+    totalGuestCount,
+  };
+}
+
+function MenuSelectionGroup({ items, title }: { items: QuoteMenuItem[]; title: string }) {
+  const groupedMenuItems = groupQuoteMenuItems(items);
+
+  if (items.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-xl border border-[#d9b76f]/20 bg-[#fffaf0]/70 p-4">
+      <h3 className="text-sm font-bold text-[#0A5458]">{title}</h3>
+      <div className="mt-3 grid gap-3 md:grid-cols-2">
+        {menuCategories
+          .filter((category) => groupedMenuItems[category].length > 0)
+          .map((category) => (
+            <div key={`${title}-${category}`}>
+              <h4 className="text-xs font-bold uppercase tracking-wide text-[#0A5458]">
+                {quoteMenuCategoryLabels[category]}
+              </h4>
+              <ul className="mt-2 space-y-1 text-sm leading-6 text-[#2f2b25]">
+                {groupedMenuItems[category].map((item) => (
+                  <li key={`${title}-${item.id}`}>{item.label}</li>
+                ))}
+              </ul>
+            </div>
+          ))}
+      </div>
+    </div>
+  );
+}
+
 export default async function RequestDetailPage({ params, searchParams }: RequestDetailPageProps) {
   await requireAdminSession();
 
@@ -90,8 +142,13 @@ export default async function RequestDetailPage({ params, searchParams }: Reques
   const contactName = request.contact_name || request.name;
   const contactPhone = request.contact_phone || request.phone;
   const contactEmail = request.contact_email || request.email;
-  const selectedMenuItems = normalizeSelectedMenuItems(request.selected_menu_items);
-  const groupedMenuItems = groupQuoteMenuItems(selectedMenuItems);
+  const explicitAdultMenuItems = normalizeSelectedMenuItems(request.selected_adult_menu_items, "adult");
+  const legacyAdultMenuItems = normalizeSelectedMenuItems(request.selected_menu_items, "adult");
+  const selectedAdultMenuItems =
+    explicitAdultMenuItems.length > 0 ? explicitAdultMenuItems : legacyAdultMenuItems;
+  const selectedChildMenuItems = normalizeSelectedMenuItems(request.selected_child_menu_items, "child");
+  const hasSelectedMenuItems = selectedAdultMenuItems.length > 0 || selectedChildMenuItems.length > 0;
+  const guestBreakdown = getGuestBreakdown(request);
   const createQuoteAction = generateQuoteForRequest.bind(null, request.id);
   const { data: quoteData, error: quotesError } = await supabase
     .from("quotes")
@@ -190,7 +247,9 @@ export default async function RequestDetailPage({ params, searchParams }: Reques
               <ReadOnlyField label="Είδος εκδήλωσης" value={request.event_type} />
               <ReadOnlyField label="Ημερομηνία εκδήλωσης" value={formatDate(request.event_date)} />
               <ReadOnlyField label="Περιοχή" value={request.location} />
-              <ReadOnlyField label="Αριθμός ατόμων" value={formatNumber(request.guest_count)} />
+              <ReadOnlyField label="Αριθμός ενηλίκων" value={formatNumber(guestBreakdown.adultGuestCount)} />
+              <ReadOnlyField label="Αριθμός παιδιών" value={formatNumber(guestBreakdown.childGuestCount)} />
+              <ReadOnlyField label="Σύνολο καλεσμένων" value={formatNumber(guestBreakdown.totalGuestCount)} />
               <ReadOnlyField label="Ενδιαφέρεται για" value={request.interested_in} />
               <ReadOnlyField label="Σημειώσεις πελάτη" value={request.notes || "Δεν συμπληρώθηκαν"} />
               <ReadOnlyField label="Ημερομηνία αιτήματος" value={formatDateTime(request.created_at)} />
@@ -199,26 +258,14 @@ export default async function RequestDetailPage({ params, searchParams }: Reques
 
           <section className="rounded-2xl border border-[#d9b76f]/25 bg-white/85 p-5 shadow-lg shadow-[#0A5458]/5">
             <h2 className="text-xl font-semibold text-[#0A5458]">Επιλογές μενού</h2>
-            {selectedMenuItems.length === 0 ? (
+            {!hasSelectedMenuItems ? (
               <p className="mt-4 rounded-xl border border-[#d9b76f]/20 bg-[#fffaf0]/70 p-4 text-sm leading-6 text-[#5f594f]">
                 Δεν έχουν επιλεγεί προϊόντα.
               </p>
             ) : (
-              <div className="mt-4 grid gap-4 md:grid-cols-2">
-                {menuCategories
-                  .filter((category) => groupedMenuItems[category].length > 0)
-                  .map((category) => (
-                    <div className="rounded-xl border border-[#d9b76f]/20 bg-[#fffaf0]/70 p-4" key={category}>
-                      <h3 className="text-xs font-bold uppercase tracking-wide text-[#0A5458]">
-                        {quoteMenuCategoryLabels[category]}
-                      </h3>
-                      <ul className="mt-3 space-y-2 text-sm leading-6 text-[#2f2b25]">
-                        {groupedMenuItems[category].map((item) => (
-                          <li key={item.id}>{item.label}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  ))}
+              <div className="mt-4 grid gap-4">
+                <MenuSelectionGroup items={selectedAdultMenuItems} title="Μενού ενηλίκων" />
+                <MenuSelectionGroup items={selectedChildMenuItems} title="Μενού παιδιών" />
               </div>
             )}
           </section>
@@ -302,6 +349,8 @@ export default async function RequestDetailPage({ params, searchParams }: Reques
             </label>
 
             <div className="grid gap-4 md:grid-cols-2">
+              <TextInput defaultValue={guestBreakdown.adultGuestCount} label="Αριθμός καλεσμένων ενηλίκων" name="adult_guest_count" type="number" />
+              <TextInput defaultValue={guestBreakdown.childGuestCount} label="Αριθμός καλεσμένων παιδιών" name="child_guest_count" type="number" />
               <TextInput defaultValue={request.price_per_person} label="Τιμή ανά άτομο" name="price_per_person" type="number" />
               <TextInput defaultValue={request.quoted_total} label="Ποσό προσφοράς" name="quoted_total" type="number" />
               <TextInput defaultValue={request.final_guest_count} label="Τελικός αριθμός ατόμων" name="final_guest_count" type="number" />

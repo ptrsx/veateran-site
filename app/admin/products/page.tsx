@@ -21,6 +21,7 @@ function normalizeProduct(product: Record<string, unknown>): QuoteProduct {
     name: String(product.name),
     category: String(product.category) as QuoteProduct["category"],
     product_key: typeof product.product_key === "string" ? product.product_key : null,
+    audience: String(product.audience ?? "adult") as QuoteProduct["audience"],
     unit: String(product.unit) as QuoteProduct["unit"],
     price_net: Number(product.price_net) || 0,
     vat_rate: Number(product.vat_rate) || 0,

@@ -47,6 +47,20 @@ function getPositiveInteger(value: string) {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
+function getGuestBreakdown(request: QuoteRequest) {
+  const adultGuestCount = request.adult_guest_count ?? request.guest_count;
+  const childGuestCount = request.child_guest_count ?? 0;
+  const totalGuestCount =
+    request.guest_count ??
+    ((adultGuestCount ?? 0) + (childGuestCount ?? 0) || null);
+
+  return {
+    adultGuestCount,
+    childGuestCount,
+    totalGuestCount,
+  };
+}
+
 function getTabHref(status?: QuoteRequestStatus) {
   const params = new URLSearchParams();
 
@@ -326,7 +340,7 @@ export default async function RequestsPage({ searchParams }: RequestsPageProps) 
                 <th className="px-4 py-3">Είδος εκδήλωσης</th>
                 <th className="px-4 py-3">Ημερομηνία εκδήλωσης</th>
                 <th className="px-4 py-3">Περιοχή</th>
-                <th className="px-4 py-3">Άτομα</th>
+                <th className="px-4 py-3">Καλεσμένοι</th>
                 <th className="px-4 py-3">Προσφορά</th>
                 <th className="px-4 py-3">Τελικό ποσό</th>
               </tr>
@@ -335,6 +349,7 @@ export default async function RequestsPage({ searchParams }: RequestsPageProps) 
               {requests.map((request) => {
                 const isBusiness = request.customer_type === "business";
                 const displayName = isBusiness ? request.business_name || request.name : request.name;
+                const guestBreakdown = getGuestBreakdown(request);
 
                 return (
                   <tr className="transition hover:bg-[#fff7e6]" key={request.id}>
@@ -361,7 +376,13 @@ export default async function RequestsPage({ searchParams }: RequestsPageProps) 
                     <td className="whitespace-nowrap px-4 py-3">{request.event_type}</td>
                     <td className="whitespace-nowrap px-4 py-3">{formatDate(request.event_date)}</td>
                     <td className="whitespace-nowrap px-4 py-3">{request.location || "-"}</td>
-                    <td className="whitespace-nowrap px-4 py-3">{formatNumber(request.guest_count)}</td>
+                    <td className="whitespace-nowrap px-4 py-3">
+                      <span className="block text-xs text-[#5f594f]">
+                        Ενήλικες: {formatNumber(guestBreakdown.adultGuestCount)} / Παιδιά:{" "}
+                        {formatNumber(guestBreakdown.childGuestCount)}
+                      </span>
+                      <span className="font-semibold">{formatNumber(guestBreakdown.totalGuestCount)}</span>
+                    </td>
                     <td className="whitespace-nowrap px-4 py-3">{formatCurrency(request.quoted_total)}</td>
                     <td className="whitespace-nowrap px-4 py-3">{formatCurrency(request.final_total)}</td>
                   </tr>

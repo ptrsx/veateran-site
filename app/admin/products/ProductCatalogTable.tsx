@@ -5,8 +5,11 @@ import { useState } from "react";
 import { createQuoteProduct, updateQuoteProduct } from "@/app/admin/products/actions";
 import { formatCurrency, formatNumber } from "@/lib/crm/formatters";
 import {
+  getQuoteProductAudienceLabel,
   getQuoteProductCategoryLabel,
   getQuoteProductUnitLabel,
+  quoteProductAudiences,
+  quoteProductAudienceLabels,
   quoteProductCategories,
   quoteProductCategoryLabels,
   quoteProductUnits,
@@ -35,6 +38,17 @@ function ProductFields({ product }: { product?: QuoteProduct }) {
           {quoteProductCategories.map((category) => (
             <option key={category} value={category}>
               {quoteProductCategoryLabels[category]}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label className={labelClass}>
+        Κοινό
+        <select className={inputClass} defaultValue={product?.audience ?? "adult"} name="audience" required>
+          {quoteProductAudiences.map((audience) => (
+            <option key={audience} value={audience}>
+              {quoteProductAudienceLabels[audience]}
             </option>
           ))}
         </select>
@@ -158,6 +172,7 @@ export function ProductCatalogTable({ products }: { products: QuoteProduct[] }) 
               <tr>
                 <th className="px-4 py-3">Προϊόν</th>
                 <th className="px-4 py-3">Κατηγορία</th>
+                <th className="px-4 py-3">Κοινό</th>
                 <th className="px-4 py-3">Μονάδα χρέωσης</th>
                 <th className="px-4 py-3">Τιμή προ ΦΠΑ</th>
                 <th className="px-4 py-3">ΦΠΑ %</th>
@@ -173,7 +188,7 @@ export function ProductCatalogTable({ products }: { products: QuoteProduct[] }) 
                 if (isEditing) {
                   return (
                     <tr key={product.id}>
-                      <td className="bg-[#fffaf0]/80 px-4 py-5" colSpan={8}>
+                      <td className="bg-[#fffaf0]/80 px-4 py-5" colSpan={9}>
                         <form action={updateQuoteProduct}>
                           <ProductFields product={product} />
                           <div className="mt-5 flex flex-wrap gap-3">
@@ -203,6 +218,7 @@ export function ProductCatalogTable({ products }: { products: QuoteProduct[] }) 
                       ) : null}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3">{getQuoteProductCategoryLabel(product.category)}</td>
+                    <td className="whitespace-nowrap px-4 py-3">{getQuoteProductAudienceLabel(product.audience)}</td>
                     <td className="whitespace-nowrap px-4 py-3">{getQuoteProductUnitLabel(product.unit)}</td>
                     <td className="whitespace-nowrap px-4 py-3 font-semibold">{formatCurrency(product.price_net)}</td>
                     <td className="whitespace-nowrap px-4 py-3">{formatNumber(product.vat_rate, 2)}%</td>
@@ -236,7 +252,7 @@ export function ProductCatalogTable({ products }: { products: QuoteProduct[] }) 
 
               {products.length === 0 ? (
                 <tr>
-                  <td className="px-4 py-10 text-center text-sm text-[#5f594f]" colSpan={8}>
+                  <td className="px-4 py-10 text-center text-sm text-[#5f594f]" colSpan={9}>
                     Δεν υπάρχουν προϊόντα ακόμη.
                   </td>
                 </tr>

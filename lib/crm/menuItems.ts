@@ -1,9 +1,11 @@
 export type QuoteMenuItemCategory = "food" | "drinks";
+export type QuoteMenuAudience = "adult" | "child";
 
 export type QuoteMenuItem = {
   id: string;
   label: string;
   category: QuoteMenuItemCategory;
+  audience: QuoteMenuAudience;
 };
 
 export const quoteMenuCategoryLabels: Record<QuoteMenuItemCategory, string> = {
@@ -11,7 +13,7 @@ export const quoteMenuCategoryLabels: Record<QuoteMenuItemCategory, string> = {
   drinks: "Ποτά & αναψυκτικά",
 };
 
-export const quoteMenuItems: QuoteMenuItem[] = [
+const foodMenuItems = [
   { id: "mini-burger", label: "Mini burger", category: "food" },
   { id: "chicken-caesar-wrap-roll", label: "Chicken caesar wrap roll", category: "food" },
   { id: "hot-dog", label: "Hot dog", category: "food" },
@@ -25,25 +27,65 @@ export const quoteMenuItems: QuoteMenuItem[] = [
   { id: "pita-club-kotopoulo", label: "Πίτα club κοτόπουλο", category: "food" },
   { id: "mpompa", label: "Μπόμπα", category: "food" },
   { id: "bao-bun", label: "Bao bun", category: "food" },
+] satisfies Array<Omit<QuoteMenuItem, "audience">>;
+
+const adultDrinkMenuItems = [
   { id: "nera", label: "Νερά", category: "drinks" },
   { id: "anapsyktika", label: "Αναψυκτικά", category: "drinks" },
   { id: "chymoi", label: "Χυμοί", category: "drinks" },
   { id: "mpyres", label: "Μπύρες", category: "drinks" },
   { id: "pota", label: "Ποτά", category: "drinks" },
   { id: "cocktails", label: "Cocktails", category: "drinks" },
+] satisfies Array<Omit<QuoteMenuItem, "audience">>;
+
+const childDrinkMenuItems = [
+  { id: "nera", label: "Νερά", category: "drinks" },
+  { id: "anapsyktika", label: "Αναψυκτικά", category: "drinks" },
+  { id: "chymoi", label: "Χυμοί", category: "drinks" },
+  { id: "mocktails", label: "Mocktails", category: "drinks" },
+] satisfies Array<Omit<QuoteMenuItem, "audience">>;
+
+function withAudience(items: Array<Omit<QuoteMenuItem, "audience">>, audience: QuoteMenuAudience) {
+  return items.map((item) => ({ ...item, audience }));
+}
+
+export const adultQuoteMenuItems: QuoteMenuItem[] = [
+  ...withAudience(foodMenuItems, "adult"),
+  ...withAudience(adultDrinkMenuItems, "adult"),
 ];
 
-const quoteMenuItemById = new Map(quoteMenuItems.map((item) => [item.id, item]));
+export const childQuoteMenuItems: QuoteMenuItem[] = [
+  ...withAudience(foodMenuItems, "child"),
+  ...withAudience(childDrinkMenuItems, "child"),
+];
 
-export function getQuoteMenuItemById(id: string) {
-  return quoteMenuItemById.get(id) ?? null;
+export const quoteMenuItems = adultQuoteMenuItems;
+
+const quoteMenuItemsByAudience = {
+  adult: adultQuoteMenuItems,
+  child: childQuoteMenuItems,
+} satisfies Record<QuoteMenuAudience, QuoteMenuItem[]>;
+
+const quoteMenuItemByAudienceAndId = {
+  adult: new Map(adultQuoteMenuItems.map((item) => [item.id, item])),
+  child: new Map(childQuoteMenuItems.map((item) => [item.id, item])),
+} satisfies Record<QuoteMenuAudience, Map<string, QuoteMenuItem>>;
+
+export function getQuoteMenuItemById(id: string, audience: QuoteMenuAudience = "adult") {
+  return quoteMenuItemByAudienceAndId[audience].get(id) ?? null;
 }
 
-export function getQuoteMenuItemsByCategory(category: QuoteMenuItemCategory) {
-  return quoteMenuItems.filter((item) => item.category === category);
+export function getQuoteMenuItemsByCategory(
+  category: QuoteMenuItemCategory,
+  audience: QuoteMenuAudience = "adult",
+) {
+  return quoteMenuItemsByAudience[audience].filter((item) => item.category === category);
 }
 
-export function normalizeSelectedMenuItems(value: unknown): QuoteMenuItem[] {
+export function normalizeSelectedMenuItems(
+  value: unknown,
+  audience: QuoteMenuAudience = "adult",
+): QuoteMenuItem[] {
   if (!Array.isArray(value)) {
     return [];
   }
@@ -56,7 +98,7 @@ export function normalizeSelectedMenuItems(value: unknown): QuoteMenuItem[] {
       continue;
     }
 
-    const menuItem = getQuoteMenuItemById(item.id);
+    const menuItem = getQuoteMenuItemById(item.id, audience);
 
     if (!menuItem || seenIds.has(menuItem.id)) {
       continue;

@@ -48,7 +48,7 @@ function TextInput({
       {label}
       <input
         className={inputClass}
-        min={type === "number" ? "1" : undefined}
+        min={type === "number" ? "0" : undefined}
         name={name}
         required={required}
         step={type === "number" ? "0.01" : undefined}
@@ -157,7 +157,8 @@ export function NewRequestForm() {
         </label>
         <TextInput label="Ημερομηνία εκδήλωσης" name="event_date" type="date" />
         <TextInput label="Περιοχή" name="location" />
-        <TextInput label="Αριθμός ατόμων" name="guest_count" type="number" />
+        <TextInput label="Αριθμός καλεσμένων ενηλίκων" name="adult_guest_count" type="number" />
+        <TextInput label="Αριθμός καλεσμένων παιδιών" name="child_guest_count" type="number" />
         <label className={labelClass}>
           Ενδιαφέρεται για
           <select className={inputClass} defaultValue="" name="interested_in">

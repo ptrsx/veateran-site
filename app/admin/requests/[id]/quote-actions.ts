@@ -11,60 +11,27 @@ import {
   defaultQuoteTerms,
   type QuoteItemInput,
 } from "@/lib/crm/quotes";
+import { normalizeSelectedMenuItems, type QuoteMenuAudience, type QuoteMenuItem } from "@/lib/crm/menuItems";
 import type { QuoteProduct, QuoteProductCategory, QuoteProductUnit } from "@/lib/crm/products";
 import type { QuoteRequest } from "@/lib/crm/types";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
-type SelectedRequestMenuItem = {
-  id: string;
-  label: string;
-  category: "food" | "drinks";
-};
-
-function isSelectedRequestMenuItem(value: unknown): value is SelectedRequestMenuItem {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-
-  const item = value as Record<string, unknown>;
-
-  return (
-    typeof item.id === "string" &&
-    typeof item.label === "string" &&
-    (item.category === "food" || item.category === "drinks")
-  );
-}
-
-function normalizeSelectedRequestMenuItems(value: unknown) {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  const seenIds = new Set<string>();
-  const items: SelectedRequestMenuItem[] = [];
-
-  for (const item of value) {
-    if (!isSelectedRequestMenuItem(item) || seenIds.has(item.id)) {
-      continue;
-    }
-
-    seenIds.add(item.id);
-    items.push({
-      id: item.id,
-      label: item.label,
-      category: item.category,
-    });
-  }
-
-  return items;
-}
+const serviceProductKeys = ["van-rental-cost", "transport-cost", "staff-cost"];
 
 function normalizeText(value: string) {
   return value.trim().toLocaleLowerCase("el-GR");
 }
 
-function findMatchingProduct(item: SelectedRequestMenuItem, products: QuoteProduct[]) {
-  const byKey = products.find((product) => product.product_key === item.id);
+function isProductAudienceAllowed(product: QuoteProduct, audience: QuoteMenuAudience) {
+  return audience === "adult"
+    ? product.audience === "adult" || product.audience === "both"
+    : product.audience === "child" || product.audience === "both";
+}
+
+function findMatchingProduct(item: QuoteMenuItem, products: QuoteProduct[], audience: QuoteMenuAudience) {
+  const byKey = products.find(
+    (product) => product.product_key === item.id && isProductAudienceAllowed(product, audience),
+  );
 
   if (byKey) {
     return byKey;
@@ -76,26 +43,50 @@ function findMatchingProduct(item: SelectedRequestMenuItem, products: QuoteProdu
     products.find(
       (product) =>
         product.category === item.category &&
+        isProductAudienceAllowed(product, audience) &&
         normalizeText(product.name) === itemLabel,
     ) ?? null
   );
 }
 
-function getQuantity(unit: QuoteProductUnit, guestCount: number | null) {
-  if (unit === "fixed") {
-    return 1;
-  }
+function getGuestBreakdown(request: QuoteRequest) {
+  const adultGuestCount = request.adult_guest_count ?? request.guest_count ?? 0;
+  const childGuestCount = request.child_guest_count ?? 0;
+  const totalGuestCount = request.guest_count ?? adultGuestCount + childGuestCount;
 
-  return guestCount ?? 0;
+  return {
+    adultGuestCount,
+    childGuestCount,
+    totalGuestCount,
+  };
 }
 
-function getQuoteItemsFromRequest(request: QuoteRequest, products: QuoteProduct[]) {
-  const selectedMenuItems = normalizeSelectedRequestMenuItems(request.selected_menu_items);
+function getSelectedMenuItems(request: QuoteRequest, audience: QuoteMenuAudience) {
+  if (audience === "adult") {
+    const explicitAdultMenuItems = normalizeSelectedMenuItems(request.selected_adult_menu_items, "adult");
+
+    return explicitAdultMenuItems.length > 0
+      ? explicitAdultMenuItems
+      : normalizeSelectedMenuItems(request.selected_menu_items, "adult");
+  }
+
+  return normalizeSelectedMenuItems(request.selected_child_menu_items, "child");
+}
+
+function getMenuQuoteItems(
+  selectedMenuItems: QuoteMenuItem[],
+  products: QuoteProduct[],
+  audience: QuoteMenuAudience,
+  guestCount: number,
+  sortOrderOffset: number,
+) {
+  if (guestCount <= 0) {
+    return [];
+  }
 
   return selectedMenuItems.map<QuoteItemInput>((item, index) => {
-    const product = findMatchingProduct(item, products);
+    const product = findMatchingProduct(item, products, audience);
     const unit = product?.unit ?? "per_person";
-    const quantity = getQuantity(unit, request.guest_count);
     const unitPriceNet = product?.price_net ?? 0;
     const vatRate = product?.vat_rate ?? 24;
     const notes =
@@ -107,14 +98,65 @@ function getQuoteItemsFromRequest(request: QuoteRequest, products: QuoteProduct[
       product_id: product?.id ?? null,
       product_name: product?.name ?? item.label,
       category: (product?.category ?? item.category) as QuoteProductCategory,
+      audience,
       unit,
-      quantity,
+      quantity: guestCount,
       unit_price_net: unitPriceNet,
       vat_rate: vatRate,
-      sort_order: index + 1,
+      sort_order: sortOrderOffset + index + 1,
       notes,
     };
   });
+}
+
+function getServiceQuoteItems(products: QuoteProduct[]) {
+  return serviceProductKeys
+    .map<QuoteItemInput | null>((productKey, index) => {
+      const product = products.find(
+        (candidate) => candidate.product_key === productKey && candidate.audience === "service",
+      );
+
+      if (!product) {
+        return null;
+      }
+
+      return {
+        product_id: product.id,
+        product_name: product.name,
+        category: product.category as QuoteProductCategory,
+        audience: "service",
+        unit: "fixed" as QuoteProductUnit,
+        quantity: 1,
+        unit_price_net: product.price_net,
+        vat_rate: product.vat_rate,
+        sort_order: 300 + index + 1,
+        notes:
+          product.price_net === 0
+            ? "Χρειάζεται έλεγχος τιμής πριν την αποστολή."
+            : null,
+      } satisfies QuoteItemInput;
+    })
+    .filter((item): item is QuoteItemInput => item !== null);
+}
+
+function getQuoteItemsFromRequest(request: QuoteRequest, products: QuoteProduct[]) {
+  const { adultGuestCount, childGuestCount } = getGuestBreakdown(request);
+  const adultQuoteItems = getMenuQuoteItems(
+    getSelectedMenuItems(request, "adult"),
+    products,
+    "adult",
+    adultGuestCount,
+    100,
+  );
+  const childQuoteItems = getMenuQuoteItems(
+    getSelectedMenuItems(request, "child"),
+    products,
+    "child",
+    childGuestCount,
+    200,
+  );
+
+  return [...adultQuoteItems, ...childQuoteItems, ...getServiceQuoteItems(products)];
 }
 
 async function generateQuoteNumber(year: number) {
@@ -183,12 +225,22 @@ export async function generateQuoteForRequest(requestId: string) {
 
   const products = (productData ?? []).map((product) => ({
     ...product,
+    audience:
+      product.audience === "adult" ||
+      product.audience === "child" ||
+      product.audience === "both" ||
+      product.audience === "service"
+        ? product.audience
+        : product.category === "service"
+          ? "service"
+          : "both",
     price_net: Number(product.price_net) || 0,
     vat_rate: Number(product.vat_rate) || 0,
     sort_order: Number(product.sort_order) || 0,
   })) as QuoteProduct[];
   const quoteItems = getQuoteItemsFromRequest(request, products);
   const quoteTotals = calculateQuoteTotals(quoteItems);
+  const guestBreakdown = getGuestBreakdown(request);
   const year = new Date().getFullYear();
 
   let quoteId = "";
@@ -219,7 +271,9 @@ export async function generateQuoteForRequest(requestId: string) {
         event_type: request.event_type,
         event_date: request.event_date,
         event_location: request.location,
-        guest_count: request.guest_count,
+        adult_guest_count: guestBreakdown.adultGuestCount,
+        child_guest_count: guestBreakdown.childGuestCount,
+        guest_count: guestBreakdown.totalGuestCount,
         subtotal_net: quoteTotals.subtotal_net,
         vat_amount: quoteTotals.vat_amount,
         total_gross: quoteTotals.total_gross,
@@ -251,6 +305,7 @@ export async function generateQuoteForRequest(requestId: string) {
         product_id: item.product_id,
         product_name: item.product_name,
         category: item.category,
+        audience: item.audience ?? null,
         unit: item.unit,
         quantity: item.quantity,
         unit_price_net: item.unit_price_net,

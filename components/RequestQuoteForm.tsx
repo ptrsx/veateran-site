@@ -1,12 +1,14 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 
 import { customerTypeLabels, quoteRequestCustomerTypes } from "@/lib/crm/customerType";
 import {
+  adultQuoteMenuItems,
+  childQuoteMenuItems,
   getQuoteMenuItemsByCategory,
   quoteMenuCategoryLabels,
-  quoteMenuItems,
+  type QuoteMenuAudience,
   type QuoteMenuItemCategory,
 } from "@/lib/crm/menuItems";
 import type { QuoteRequestCustomerType } from "@/lib/crm/types";
@@ -41,13 +43,47 @@ function getFormString(formData: FormData, key: string) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function parseGuestCount(value: string) {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return 0;
+  }
+
+  if (!/^\d+$/.test(trimmed)) {
+    return null;
+  }
+
+  const parsed = Number.parseInt(trimmed, 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 export function RequestQuoteForm() {
   const [status, setStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
   const [customerType, setCustomerType] = useState<QuoteRequestCustomerType>("individual");
   const [invoiceRequired, setInvoiceRequired] = useState(false);
   const [menuExpanded, setMenuExpanded] = useState(false);
-  const [selectedMenuItemIds, setSelectedMenuItemIds] = useState<string[]>([]);
+  const [adultGuestCount, setAdultGuestCount] = useState("");
+  const [childGuestCount, setChildGuestCount] = useState("");
+  const [selectedAdultMenuItemIds, setSelectedAdultMenuItemIds] = useState<string[]>([]);
+  const [selectedChildMenuItemIds, setSelectedChildMenuItemIds] = useState<string[]>([]);
   const [errorMessage, setErrorMessage] = useState("");
+  const adultGuestCountValue = parseGuestCount(adultGuestCount) ?? 0;
+  const childGuestCountValue = parseGuestCount(childGuestCount) ?? 0;
+  const canSelectAdultMenu = adultGuestCountValue > 0;
+  const canSelectChildMenu = childGuestCountValue > 0;
+
+  useEffect(() => {
+    if (!canSelectAdultMenu) {
+      setSelectedAdultMenuItemIds([]);
+    }
+  }, [canSelectAdultMenu]);
+
+  useEffect(() => {
+    if (!canSelectChildMenu) {
+      setSelectedChildMenuItemIds([]);
+    }
+  }, [canSelectChildMenu]);
 
   function handleCustomerTypeChange(type: QuoteRequestCustomerType) {
     setCustomerType(type);
@@ -59,8 +95,10 @@ export function RequestQuoteForm() {
     }
   }
 
-  function handleMenuItemChange(itemId: string, checked: boolean) {
-    setSelectedMenuItemIds((currentIds) => {
+  function handleMenuItemChange(audience: QuoteMenuAudience, itemId: string, checked: boolean) {
+    const setSelectedIds = audience === "adult" ? setSelectedAdultMenuItemIds : setSelectedChildMenuItemIds;
+
+    setSelectedIds((currentIds) => {
       if (checked) {
         return currentIds.includes(itemId) ? currentIds : [...currentIds, itemId];
       }
@@ -73,19 +111,45 @@ export function RequestQuoteForm() {
     event.preventDefault();
     const form = event.currentTarget;
     const formData = new FormData(form);
-    const selectedMenuItems = quoteMenuItems.filter((item) => selectedMenuItemIds.includes(item.id));
+    const adultCount = parseGuestCount(getFormString(formData, "adultGuestCount"));
+    const childCount = parseGuestCount(getFormString(formData, "childGuestCount"));
 
     setStatus("submitting");
     setErrorMessage("");
 
+    if (adultCount === null || childCount === null) {
+      setStatus("error");
+      setErrorMessage("Οι αριθμοί καλεσμένων πρέπει να είναι ακέραιοι αριθμοί ή 0.");
+      return;
+    }
+
+    if (adultCount + childCount <= 0) {
+      setStatus("error");
+      setErrorMessage("Συμπλήρωσε αριθμό ενηλίκων ή παιδιών για να επιλέξεις αντίστοιχο μενού.");
+      return;
+    }
+
+    const selectedAdultMenuItems =
+      adultCount > 0
+        ? adultQuoteMenuItems.filter((item) => selectedAdultMenuItemIds.includes(item.id))
+        : [];
+    const selectedChildMenuItems =
+      childCount > 0
+        ? childQuoteMenuItems.filter((item) => selectedChildMenuItemIds.includes(item.id))
+        : [];
+
     const commonPayload = {
+      adultGuestCount: adultCount,
+      childGuestCount: childCount,
       eventDate: getFormString(formData, "eventDate"),
       eventLocation: getFormString(formData, "eventLocation"),
       eventType: getFormString(formData, "eventType"),
-      guestCount: getFormString(formData, "guestCount"),
+      guestCount: adultCount + childCount,
       interestedIn: getFormString(formData, "interestedIn"),
       message: getFormString(formData, "message"),
-      selectedMenuItems,
+      selectedAdultMenuItems,
+      selectedChildMenuItems,
+      selectedMenuItems: selectedAdultMenuItems,
     };
 
     let payload: Record<string, unknown>;
@@ -152,7 +216,10 @@ export function RequestQuoteForm() {
       setCustomerType("individual");
       setInvoiceRequired(false);
       setMenuExpanded(false);
-      setSelectedMenuItemIds([]);
+      setAdultGuestCount("");
+      setChildGuestCount("");
+      setSelectedAdultMenuItemIds([]);
+      setSelectedChildMenuItemIds([]);
       setErrorMessage("");
       setStatus("success");
       return;
@@ -298,8 +365,28 @@ export function RequestQuoteForm() {
               <input className={inputClass} name="eventLocation" type="text" />
             </label>
             <label className={labelClass}>
-              Αριθμός καλεσμένων
-              <input className={inputClass} name="guestCount" type="number" min="1" />
+              Αριθμός καλεσμένων ενηλίκων
+              <input
+                className={inputClass}
+                min="0"
+                name="adultGuestCount"
+                onChange={(event) => setAdultGuestCount(event.target.value)}
+                step="1"
+                type="number"
+                value={adultGuestCount}
+              />
+            </label>
+            <label className={labelClass}>
+              Αριθμός καλεσμένων παιδιών
+              <input
+                className={inputClass}
+                min="0"
+                name="childGuestCount"
+                onChange={(event) => setChildGuestCount(event.target.value)}
+                step="1"
+                type="number"
+                value={childGuestCount}
+              />
             </label>
             <label className={labelClass}>
               Ενδιαφέρομαι για
@@ -344,30 +431,58 @@ export function RequestQuoteForm() {
           </button>
 
           {menuExpanded ? (
-            <div className="mt-5 grid gap-6 lg:grid-cols-2">
-              {menuCategories.map((category) => (
-                <div key={category}>
-                  <h3 className="text-sm font-bold uppercase tracking-wide text-[#0A5458]">
-                    {quoteMenuCategoryLabels[category]}
-                  </h3>
-                  <div className="mt-3 grid gap-2">
-                    {getQuoteMenuItemsByCategory(category).map((item) => (
-                      <label
-                        className="flex items-center gap-3 rounded-2xl border border-[#d9b76f]/20 bg-white/70 px-4 py-3 text-sm font-semibold text-[#2f2b25] transition hover:border-[#0A5458]/40"
-                        key={item.id}
-                      >
-                        <input
-                          checked={selectedMenuItemIds.includes(item.id)}
-                          className="h-4 w-4 accent-[#0A5458]"
-                          name="selectedMenuItemIds"
-                          onChange={(event) => handleMenuItemChange(item.id, event.target.checked)}
-                          type="checkbox"
-                          value={item.id}
-                        />
-                        {item.label}
-                      </label>
-                    ))}
-                  </div>
+            <div className="mt-5 grid gap-6 xl:grid-cols-2">
+              {[
+                {
+                  audience: "adult" as const,
+                  title: "Μενού ενηλίκων",
+                  enabled: canSelectAdultMenu,
+                  selectedIds: selectedAdultMenuItemIds,
+                },
+                {
+                  audience: "child" as const,
+                  title: "Μενού παιδιών",
+                  enabled: canSelectChildMenu,
+                  selectedIds: selectedChildMenuItemIds,
+                },
+              ].map((menuSection) => (
+                <div className="rounded-2xl border border-[#d9b76f]/20 bg-white/60 p-4" key={menuSection.audience}>
+                  <h3 className="text-base font-semibold text-[#0A5458]">{menuSection.title}</h3>
+                  {!menuSection.enabled ? (
+                    <p className="mt-3 rounded-xl border border-[#d9b76f]/20 bg-[#fffaf0]/75 p-3 text-sm leading-6 text-[#5f594f]">
+                      Συμπλήρωσε αριθμό ενηλίκων ή παιδιών για να επιλέξεις αντίστοιχο μενού.
+                    </p>
+                  ) : (
+                    <div className="mt-4 grid gap-5 lg:grid-cols-2">
+                      {menuCategories.map((category) => (
+                        <div key={`${menuSection.audience}-${category}`}>
+                          <h4 className="text-xs font-bold uppercase tracking-wide text-[#0A5458]">
+                            {quoteMenuCategoryLabels[category]}
+                          </h4>
+                          <div className="mt-3 grid gap-2">
+                            {getQuoteMenuItemsByCategory(category, menuSection.audience).map((item) => (
+                              <label
+                                className="flex items-center gap-3 rounded-2xl border border-[#d9b76f]/20 bg-white/80 px-4 py-3 text-sm font-semibold text-[#2f2b25] transition hover:border-[#0A5458]/40"
+                                key={`${menuSection.audience}-${item.id}`}
+                              >
+                                <input
+                                  checked={menuSection.selectedIds.includes(item.id)}
+                                  className="h-4 w-4 accent-[#0A5458]"
+                                  name={`selected${menuSection.audience === "adult" ? "Adult" : "Child"}MenuItemIds`}
+                                  onChange={(event) =>
+                                    handleMenuItemChange(menuSection.audience, item.id, event.target.checked)
+                                  }
+                                  type="checkbox"
+                                  value={item.id}
+                                />
+                                {item.label}
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

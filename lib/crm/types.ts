@@ -23,6 +23,7 @@ export type QuoteRequestSelectedMenuItem = {
   id: string;
   label: string;
   category: "food" | "drinks";
+  audience: "adult" | "child";
 };
 
 export type QuoteRequest = {
@@ -43,6 +44,10 @@ export type QuoteRequest = {
   contact_email: string | null;
   invoice_required: boolean;
   selected_menu_items: QuoteRequestSelectedMenuItem[];
+  adult_guest_count: number | null;
+  child_guest_count: number | null;
+  selected_adult_menu_items: QuoteRequestSelectedMenuItem[];
+  selected_child_menu_items: QuoteRequestSelectedMenuItem[];
   event_type: string;
   event_date: string | null;
   location: string | null;
@@ -81,6 +86,10 @@ export type QuoteRequestInsert = {
   contact_email?: string | null;
   invoice_required?: boolean;
   selected_menu_items?: QuoteRequestSelectedMenuItem[];
+  adult_guest_count?: number | null;
+  child_guest_count?: number | null;
+  selected_adult_menu_items?: QuoteRequestSelectedMenuItem[];
+  selected_child_menu_items?: QuoteRequestSelectedMenuItem[];
   event_type: string;
   event_date?: string | null;
   location?: string | null;

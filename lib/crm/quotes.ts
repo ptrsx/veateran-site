@@ -32,6 +32,8 @@ export type Quote = {
   event_type: string | null;
   event_date: string | null;
   event_location: string | null;
+  adult_guest_count: number | null;
+  child_guest_count: number | null;
   guest_count: number | null;
   subtotal_net: number;
   vat_amount: number;
@@ -43,6 +45,8 @@ export type Quote = {
   sent_at: string | null;
 };
 
+export type QuoteItemAudience = "adult" | "child" | "service";
+
 export type QuoteItem = {
   id: string;
   created_at: string;
@@ -50,6 +54,7 @@ export type QuoteItem = {
   product_id: string | null;
   product_name: string;
   category: QuoteProductCategory;
+  audience: QuoteItemAudience | null;
   unit: QuoteProductUnit;
   quantity: number;
   unit_price_net: number;
@@ -70,6 +75,7 @@ export type QuoteItemInput = {
   product_id?: string | null;
   product_name: string;
   category: QuoteProductCategory;
+  audience?: QuoteItemAudience | null;
   unit: QuoteProductUnit;
   quantity: number;
   unit_price_net: number;
@@ -109,6 +115,23 @@ export const quoteStatusToneClasses: Record<QuoteStatus, string> = {
   DECLINED: "border-red-200 bg-red-50 text-red-800",
   CANCELLED: "border-zinc-200 bg-zinc-50 text-zinc-500",
 };
+
+export const quoteItemAudienceLabels: Record<QuoteItemAudience, string> = {
+  adult: "Μενού ενηλίκων",
+  child: "Μενού παιδιών",
+  service: "Πρόσθετα κόστη",
+};
+
+export const quoteItemGroupLabels = {
+  adult: "Μενού ενηλίκων",
+  child: "Μενού παιδιών",
+  service: "Πρόσθετα κόστη",
+  other: "Άλλο",
+} satisfies Record<QuoteItemAudience | "other", string>;
+
+export function isQuoteItemAudience(value: string): value is QuoteItemAudience {
+  return value === "adult" || value === "child" || value === "service";
+}
 
 export const defaultQuotePublicNotes =
   "Η προσφορά βασίζεται στα στοιχεία που μας αποστείλατε και μπορεί να προσαρμοστεί ανάλογα με τις ανάγκες της εκδήλωσης.";

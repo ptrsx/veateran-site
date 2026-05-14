@@ -8,10 +8,12 @@ import { formatCurrency, formatDate, formatNumber } from "@/lib/crm/formatters";
 import {
   calculateQuoteItemLineTotal,
   calculateQuoteTotals,
+  quoteItemGroupLabels,
   quoteStatuses,
   quoteStatusLabels,
   type Quote,
   type QuoteItem,
+  type QuoteItemAudience,
 } from "@/lib/crm/quotes";
 import {
   quoteProductCategories,
@@ -26,6 +28,7 @@ type EditableQuoteItem = {
   product_id: string | null;
   product_name: string;
   category: QuoteItem["category"];
+  audience: QuoteItem["audience"];
   unit: QuoteItem["unit"];
   quantity: string;
   unit_price_net: string;
@@ -45,6 +48,7 @@ function getRowFromItem(item: QuoteItem): EditableQuoteItem {
     product_id: item.product_id,
     product_name: item.product_name,
     category: item.category,
+    audience: item.audience,
     unit: item.unit,
     quantity: String(item.quantity),
     unit_price_net: String(item.unit_price_net),
@@ -66,6 +70,7 @@ function getNewRow(sortOrder: number): EditableQuoteItem {
     product_id: null,
     product_name: "",
     category: "other",
+    audience: null,
     unit: "fixed",
     quantity: "1",
     unit_price_net: "0",
@@ -75,9 +80,39 @@ function getNewRow(sortOrder: number): EditableQuoteItem {
   };
 }
 
+function getQuoteGuestBreakdown(quote: Quote) {
+  const adultGuestCount = quote.adult_guest_count ?? quote.guest_count;
+  const childGuestCount = quote.child_guest_count ?? 0;
+  const totalGuestCount =
+    quote.guest_count ??
+    ((adultGuestCount ?? 0) + (childGuestCount ?? 0) || null);
+
+  return {
+    adultGuestCount,
+    childGuestCount,
+    totalGuestCount,
+  };
+}
+
+function getRowGroup(row: EditableQuoteItem) {
+  if (row.audience === "adult" || row.audience === "child" || row.audience === "service") {
+    return row.audience;
+  }
+
+  return row.category === "service" ? "service" : "other";
+}
+
+const quoteItemAudienceOptions: Array<{ label: string; value: QuoteItemAudience | "" }> = [
+  { label: quoteItemGroupLabels.adult, value: "adult" },
+  { label: quoteItemGroupLabels.child, value: "child" },
+  { label: quoteItemGroupLabels.service, value: "service" },
+  { label: quoteItemGroupLabels.other, value: "" },
+];
+
 export function QuoteEditor({ quote, items }: { quote: Quote; items: QuoteItem[] }) {
   const [rows, setRows] = useState<EditableQuoteItem[]>(items.map(getRowFromItem));
   const [recalculated, setRecalculated] = useState(false);
+  const guestBreakdown = getQuoteGuestBreakdown(quote);
 
   const totals = useMemo(
     () =>
@@ -88,6 +123,16 @@ export function QuoteEditor({ quote, items }: { quote: Quote; items: QuoteItem[]
           vat_rate: getNumber(row.vat_rate),
         })),
       ),
+    [rows],
+  );
+  const groupedRows = useMemo(
+    () =>
+      (["adult", "child", "service", "other"] as const)
+        .map((group) => ({
+          group,
+          rows: rows.filter((row) => getRowGroup(row) === group),
+        }))
+        .filter((group) => group.rows.length > 0),
     [rows],
   );
 
@@ -162,7 +207,9 @@ export function QuoteEditor({ quote, items }: { quote: Quote; items: QuoteItem[]
               <p>Τύπος: {quote.event_type || "-"}</p>
               <p>Ημερομηνία: {formatDate(quote.event_date)}</p>
               <p>Περιοχή: {quote.event_location || "-"}</p>
-              <p>Άτομα: {formatNumber(quote.guest_count)}</p>
+              <p>Ενήλικες: {formatNumber(guestBreakdown.adultGuestCount)}</p>
+              <p>Παιδιά: {formatNumber(guestBreakdown.childGuestCount)}</p>
+              <p>Σύνολο: {formatNumber(guestBreakdown.totalGuestCount)}</p>
             </div>
           </div>
         </div>
@@ -181,143 +228,170 @@ export function QuoteEditor({ quote, items }: { quote: Quote; items: QuoteItem[]
         </div>
 
         <div className="mt-5 space-y-4">
-          {rows.map((row) => {
-            const lineTotal = calculateQuoteItemLineTotal({
-              quantity: getNumber(row.quantity),
-              unit_price_net: getNumber(row.unit_price_net),
-            });
-            const needsReview = getNumber(row.unit_price_net) === 0 || row.notes.includes("Χρειάζεται");
+          {groupedRows.map(({ group, rows: groupRows }) => (
+            <div className="space-y-3" key={group}>
+              <h3 className="text-sm font-bold text-[#0A5458]">{quoteItemGroupLabels[group]}</h3>
+              {groupRows.map((row) => {
+                const lineTotal = calculateQuoteItemLineTotal({
+                  quantity: getNumber(row.quantity),
+                  unit_price_net: getNumber(row.unit_price_net),
+                });
+                const needsReview = getNumber(row.unit_price_net) === 0 || row.notes.includes("Χρειάζεται");
 
-            return (
-              <div className="rounded-2xl border border-[#d9b76f]/25 bg-[#fffaf0]/70 p-4" key={row.key}>
-                <input name="row_key" type="hidden" value={row.key} />
-                <input name={`item_id_${row.key}`} type="hidden" value={row.id ?? ""} />
-                <input name={`product_id_${row.key}`} type="hidden" value={row.product_id ?? ""} />
+                return (
+                  <div className="rounded-2xl border border-[#d9b76f]/25 bg-[#fffaf0]/70 p-4" key={row.key}>
+                    <input name="row_key" type="hidden" value={row.key} />
+                    <input name={`item_id_${row.key}`} type="hidden" value={row.id ?? ""} />
+                    <input name={`product_id_${row.key}`} type="hidden" value={row.product_id ?? ""} />
 
-                <div className="grid gap-4 lg:grid-cols-[1.4fr_0.85fr_0.85fr_0.7fr_0.85fr_0.65fr_0.85fr]">
-                  <label className={labelClass}>
-                    Προϊόν
-                    <input
-                      className={`${inputClass} mt-2`}
-                      name={`product_name_${row.key}`}
-                      onChange={(event) => updateRow(row.key, { product_name: event.target.value })}
-                      required
-                      type="text"
-                      value={row.product_name}
-                    />
-                  </label>
-                  <label className={labelClass}>
-                    Κατηγορία
-                    <select
-                      className={`${inputClass} mt-2`}
-                      name={`category_${row.key}`}
-                      onChange={(event) => updateRow(row.key, { category: event.target.value as QuoteItem["category"] })}
-                      required
-                      value={row.category}
-                    >
-                      {quoteProductCategories.map((category) => (
-                        <option key={category} value={category}>
-                          {quoteProductCategoryLabels[category]}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className={labelClass}>
-                    Μονάδα
-                    <select
-                      className={`${inputClass} mt-2`}
-                      name={`unit_${row.key}`}
-                      onChange={(event) => updateRow(row.key, { unit: event.target.value as QuoteItem["unit"] })}
-                      required
-                      value={row.unit}
-                    >
-                      {quoteProductUnits.map((unit) => (
-                        <option key={unit} value={unit}>
-                          {quoteProductUnitLabels[unit]}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className={labelClass}>
-                    Ποσότητα
-                    <input
-                      className={`${inputClass} mt-2`}
-                      min="0"
-                      name={`quantity_${row.key}`}
-                      onChange={(event) => updateRow(row.key, { quantity: event.target.value })}
-                      step="0.01"
-                      type="number"
-                      value={row.quantity}
-                    />
-                  </label>
-                  <label className={labelClass}>
-                    Τιμή προ ΦΠΑ
-                    <input
-                      className={`${inputClass} mt-2`}
-                      min="0"
-                      name={`unit_price_net_${row.key}`}
-                      onChange={(event) => updateRow(row.key, { unit_price_net: event.target.value })}
-                      step="0.01"
-                      type="number"
-                      value={row.unit_price_net}
-                    />
-                  </label>
-                  <label className={labelClass}>
-                    ΦΠΑ %
-                    <input
-                      className={`${inputClass} mt-2`}
-                      min="0"
-                      name={`vat_rate_${row.key}`}
-                      onChange={(event) => updateRow(row.key, { vat_rate: event.target.value })}
-                      step="0.01"
-                      type="number"
-                      value={row.vat_rate}
-                    />
-                  </label>
-                  <label className={labelClass}>
-                    Σειρά
-                    <input
-                      className={`${inputClass} mt-2`}
-                      name={`sort_order_${row.key}`}
-                      onChange={(event) => updateRow(row.key, { sort_order: event.target.value })}
-                      step="1"
-                      type="number"
-                      value={row.sort_order}
-                    />
-                  </label>
-                </div>
+                    <div className="grid gap-4 lg:grid-cols-[1.4fr_0.8fr_0.82fr_0.8fr_0.65fr_0.82fr_0.58fr_0.65fr]">
+                      <label className={labelClass}>
+                        Προϊόν
+                        <input
+                          className={`${inputClass} mt-2`}
+                          name={`product_name_${row.key}`}
+                          onChange={(event) => updateRow(row.key, { product_name: event.target.value })}
+                          required
+                          type="text"
+                          value={row.product_name}
+                        />
+                      </label>
+                      <label className={labelClass}>
+                        Ομάδα
+                        <select
+                          className={`${inputClass} mt-2`}
+                          name={`audience_${row.key}`}
+                          onChange={(event) =>
+                            updateRow(row.key, {
+                              audience:
+                                event.target.value === ""
+                                  ? null
+                                  : (event.target.value as QuoteItemAudience),
+                            })
+                          }
+                          value={row.audience ?? ""}
+                        >
+                          {quoteItemAudienceOptions.map((option) => (
+                            <option key={option.value || "other"} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className={labelClass}>
+                        Κατηγορία
+                        <select
+                          className={`${inputClass} mt-2`}
+                          name={`category_${row.key}`}
+                          onChange={(event) => updateRow(row.key, { category: event.target.value as QuoteItem["category"] })}
+                          required
+                          value={row.category}
+                        >
+                          {quoteProductCategories.map((category) => (
+                            <option key={category} value={category}>
+                              {quoteProductCategoryLabels[category]}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className={labelClass}>
+                        Μονάδα
+                        <select
+                          className={`${inputClass} mt-2`}
+                          name={`unit_${row.key}`}
+                          onChange={(event) => updateRow(row.key, { unit: event.target.value as QuoteItem["unit"] })}
+                          required
+                          value={row.unit}
+                        >
+                          {quoteProductUnits.map((unit) => (
+                            <option key={unit} value={unit}>
+                              {quoteProductUnitLabels[unit]}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className={labelClass}>
+                        Ποσότητα
+                        <input
+                          className={`${inputClass} mt-2`}
+                          min="0"
+                          name={`quantity_${row.key}`}
+                          onChange={(event) => updateRow(row.key, { quantity: event.target.value })}
+                          step="0.01"
+                          type="number"
+                          value={row.quantity}
+                        />
+                      </label>
+                      <label className={labelClass}>
+                        Τιμή προ ΦΠΑ
+                        <input
+                          className={`${inputClass} mt-2`}
+                          min="0"
+                          name={`unit_price_net_${row.key}`}
+                          onChange={(event) => updateRow(row.key, { unit_price_net: event.target.value })}
+                          step="0.01"
+                          type="number"
+                          value={row.unit_price_net}
+                        />
+                      </label>
+                      <label className={labelClass}>
+                        ΦΠΑ %
+                        <input
+                          className={`${inputClass} mt-2`}
+                          min="0"
+                          name={`vat_rate_${row.key}`}
+                          onChange={(event) => updateRow(row.key, { vat_rate: event.target.value })}
+                          step="0.01"
+                          type="number"
+                          value={row.vat_rate}
+                        />
+                      </label>
+                      <label className={labelClass}>
+                        Σειρά
+                        <input
+                          className={`${inputClass} mt-2`}
+                          name={`sort_order_${row.key}`}
+                          onChange={(event) => updateRow(row.key, { sort_order: event.target.value })}
+                          step="1"
+                          type="number"
+                          value={row.sort_order}
+                        />
+                      </label>
+                    </div>
 
-                <div className="mt-4 grid gap-4 md:grid-cols-[1fr_auto_auto] md:items-end">
-                  <label className={labelClass}>
-                    Σημειώσεις γραμμής
-                    <textarea
-                      className={`${inputClass} mt-2 min-h-20`}
-                      name={`notes_${row.key}`}
-                      onChange={(event) => updateRow(row.key, { notes: event.target.value })}
-                      value={row.notes}
-                    />
-                  </label>
-                  <div className="rounded-xl border border-[#d9b76f]/20 bg-white/75 p-3 text-sm">
-                    <p className="text-xs font-bold uppercase tracking-wide text-[#0A5458]">Σύνολο προ ΦΠΑ</p>
-                    <p className="mt-1 font-semibold text-[#2f2b25]">{formatCurrency(lineTotal)}</p>
+                    <div className="mt-4 grid gap-4 md:grid-cols-[1fr_auto_auto] md:items-end">
+                      <label className={labelClass}>
+                        Σημειώσεις γραμμής
+                        <textarea
+                          className={`${inputClass} mt-2 min-h-20`}
+                          name={`notes_${row.key}`}
+                          onChange={(event) => updateRow(row.key, { notes: event.target.value })}
+                          value={row.notes}
+                        />
+                      </label>
+                      <div className="rounded-xl border border-[#d9b76f]/20 bg-white/75 p-3 text-sm">
+                        <p className="text-xs font-bold uppercase tracking-wide text-[#0A5458]">Σύνολο προ ΦΠΑ</p>
+                        <p className="mt-1 font-semibold text-[#2f2b25]">{formatCurrency(lineTotal)}</p>
+                      </div>
+                      <button
+                        className="rounded-full border border-red-200 px-4 py-2 text-sm font-bold text-red-700 transition hover:bg-red-50"
+                        onClick={() => removeRow(row.key)}
+                        type="button"
+                      >
+                        Αφαίρεση
+                      </button>
+                    </div>
+
+                    {needsReview ? (
+                      <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-800">
+                        Χρειάζεται έλεγχος τιμής πριν την αποστολή.
+                      </p>
+                    ) : null}
                   </div>
-                  <button
-                    className="rounded-full border border-red-200 px-4 py-2 text-sm font-bold text-red-700 transition hover:bg-red-50"
-                    onClick={() => removeRow(row.key)}
-                    type="button"
-                  >
-                    Αφαίρεση
-                  </button>
-                </div>
-
-                {needsReview ? (
-                  <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-800">
-                    Χρειάζεται έλεγχος τιμής πριν την αποστολή.
-                  </p>
-                ) : null}
-              </div>
-            );
-          })}
+                );
+              })}
+            </div>
+          ))}
 
           {rows.length === 0 ? (
             <p className="rounded-xl border border-[#d9b76f]/20 bg-[#fffaf0]/70 p-4 text-sm leading-6 text-[#5f594f]">

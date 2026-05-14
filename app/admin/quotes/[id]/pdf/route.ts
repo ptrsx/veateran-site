@@ -7,7 +7,7 @@ import type { Content, TableCell, TDocumentDefinitions } from "pdfmake/interface
 
 import { requireAdminSession } from "@/lib/adminAuth";
 import { formatCurrency, formatDate } from "@/lib/crm/formatters";
-import { quoteStatusLabels, type Quote, type QuoteItem } from "@/lib/crm/quotes";
+import { quoteItemGroupLabels, quoteStatusLabels, type Quote, type QuoteItem } from "@/lib/crm/quotes";
 import { quoteProductCategoryLabels, quoteProductUnitLabels } from "@/lib/crm/products";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
@@ -58,6 +58,14 @@ function normalizeQuote(value: Record<string, unknown>): Quote {
     event_type: typeof value.event_type === "string" ? value.event_type : null,
     event_date: typeof value.event_date === "string" ? value.event_date : null,
     event_location: typeof value.event_location === "string" ? value.event_location : null,
+    adult_guest_count:
+      value.adult_guest_count === null || value.adult_guest_count === undefined
+        ? null
+        : Number(value.adult_guest_count),
+    child_guest_count:
+      value.child_guest_count === null || value.child_guest_count === undefined
+        ? null
+        : Number(value.child_guest_count),
     guest_count: value.guest_count === null || value.guest_count === undefined ? null : Number(value.guest_count),
     subtotal_net: Number(value.subtotal_net) || 0,
     vat_amount: Number(value.vat_amount) || 0,
@@ -78,6 +86,10 @@ function normalizeQuoteItem(value: Record<string, unknown>): QuoteItem {
     product_id: typeof value.product_id === "string" ? value.product_id : null,
     product_name: String(value.product_name),
     category: String(value.category) as QuoteItem["category"],
+    audience:
+      value.audience === "adult" || value.audience === "child" || value.audience === "service"
+        ? value.audience
+        : null,
     unit: String(value.unit) as QuoteItem["unit"],
     quantity: Number(value.quantity) || 0,
     unit_price_net: Number(value.unit_price_net) || 0,
@@ -200,6 +212,28 @@ function getCustomerContent(quote: Quote) {
   ]);
 }
 
+function getQuoteGuestBreakdown(quote: Quote) {
+  const adultGuestCount = quote.adult_guest_count ?? quote.guest_count;
+  const childGuestCount = quote.child_guest_count ?? 0;
+  const totalGuestCount =
+    quote.guest_count ??
+    ((adultGuestCount ?? 0) + (childGuestCount ?? 0) || null);
+
+  return {
+    adultGuestCount,
+    childGuestCount,
+    totalGuestCount,
+  };
+}
+
+function getItemGroup(item: QuoteItem) {
+  if (item.audience === "adult" || item.audience === "child" || item.audience === "service") {
+    return item.audience;
+  }
+
+  return item.category === "service" ? "service" : "other";
+}
+
 function getItemsTable(items: QuoteItem[]) {
   const body: TableCell[][] = [
     [
@@ -248,7 +282,47 @@ function getItemsTable(items: QuoteItem[]) {
   } satisfies Content;
 }
 
+function getItemsContent(quote: Quote, items: QuoteItem[]) {
+  const guestBreakdown = getQuoteGuestBreakdown(quote);
+  const groups = (["adult", "child", "service", "other"] as const)
+    .map((group) => {
+      const groupItems = items.filter((item) => getItemGroup(item) === group);
+      const enabled =
+        (group === "adult" && (guestBreakdown.adultGuestCount ?? 0) > 0) ||
+        (group === "child" && (guestBreakdown.childGuestCount ?? 0) > 0) ||
+        group === "service" ||
+        group === "other";
+
+      return {
+        group,
+        items: enabled ? groupItems : [],
+      };
+    })
+    .filter((group) => group.items.length > 0);
+
+  if (groups.length === 0) {
+    return [
+      {
+        text: "Δεν υπάρχουν γραμμές στην προσφορά.",
+        color: brand.mutedText,
+        margin: [0, 0, 0, 12],
+      },
+    ] satisfies Content[];
+  }
+
+  return groups.flatMap((group) => [
+    {
+      text: quoteItemGroupLabels[group.group],
+      style: "sectionTitle",
+      margin: [0, group.group === groups[0].group ? 0 : 18, 0, 8],
+    } satisfies Content,
+    getItemsTable(group.items),
+  ]);
+}
+
 function getDocumentDefinition(quote: Quote, items: QuoteItem[], logoDataUrl: string | null): TDocumentDefinitions {
+  const guestBreakdown = getQuoteGuestBreakdown(quote);
+
   return {
     pageSize: "A4",
     pageMargins: [42, 42, 42, 54],
@@ -324,20 +398,16 @@ function getDocumentDefinition(quote: Quote, items: QuoteItem[], logoDataUrl: st
               detailLine("Τύπος", quote.event_type),
               detailLine("Ημερομηνία", formatDate(quote.event_date)),
               detailLine("Τοποθεσία", quote.event_location),
-              detailLine("Άτομα", quote.guest_count),
+              detailLine("Ενήλικες", guestBreakdown.adultGuestCount),
+              detailLine("Παιδιά", guestBreakdown.childGuestCount),
+              detailLine("Σύνολο", guestBreakdown.totalGuestCount),
             ]),
           },
         ],
         columnGap: 28,
       },
       { text: "Προϊόντα & υπηρεσίες", style: "sectionTitle", margin: [0, 24, 0, 10] },
-      items.length > 0
-        ? getItemsTable(items)
-        : {
-            text: "Δεν υπάρχουν γραμμές στην προσφορά.",
-            color: brand.mutedText,
-            margin: [0, 0, 0, 12],
-          },
+      ...getItemsContent(quote, items),
       {
         columns: [
           { text: "" },

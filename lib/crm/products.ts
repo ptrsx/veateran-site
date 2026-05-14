@@ -2,6 +2,8 @@ export type QuoteProductCategory = "food" | "drinks" | "service" | "other";
 
 export type QuoteProductUnit = "per_person" | "per_item" | "fixed";
 
+export type QuoteProductAudience = "adult" | "child" | "both" | "service";
+
 export type QuoteProduct = {
   id: string;
   created_at: string;
@@ -9,6 +11,7 @@ export type QuoteProduct = {
   name: string;
   category: QuoteProductCategory;
   product_key: string | null;
+  audience: QuoteProductAudience;
   unit: QuoteProductUnit;
   price_net: number;
   vat_rate: number;
@@ -20,6 +23,7 @@ export type QuoteProduct = {
 export type QuoteProductInsert = {
   name: string;
   category: QuoteProductCategory;
+  audience: QuoteProductAudience;
   unit: QuoteProductUnit;
   price_net: number;
   vat_rate: number;
@@ -47,12 +51,25 @@ export const quoteProductUnitLabels: Record<QuoteProductUnit, string> = {
   fixed: "Σταθερή χρέωση",
 };
 
+export const quoteProductAudiences: QuoteProductAudience[] = ["adult", "child", "both", "service"];
+
+export const quoteProductAudienceLabels: Record<QuoteProductAudience, string> = {
+  adult: "Ενήλικες",
+  child: "Παιδιά",
+  both: "Ενήλικες & παιδιά",
+  service: "Υπηρεσία",
+};
+
 export function isQuoteProductCategory(value: string): value is QuoteProductCategory {
   return quoteProductCategories.includes(value as QuoteProductCategory);
 }
 
 export function isQuoteProductUnit(value: string): value is QuoteProductUnit {
   return quoteProductUnits.includes(value as QuoteProductUnit);
+}
+
+export function isQuoteProductAudience(value: string): value is QuoteProductAudience {
+  return quoteProductAudiences.includes(value as QuoteProductAudience);
 }
 
 export function getQuoteProductCategoryLabel(value: string | null | undefined) {
@@ -65,4 +82,10 @@ export function getQuoteProductUnitLabel(value: string | null | undefined) {
   return isQuoteProductUnit(value ?? "")
     ? quoteProductUnitLabels[value as QuoteProductUnit]
     : quoteProductUnitLabels.per_person;
+}
+
+export function getQuoteProductAudienceLabel(value: string | null | undefined) {
+  return isQuoteProductAudience(value ?? "")
+    ? quoteProductAudienceLabels[value as QuoteProductAudience]
+    : quoteProductAudienceLabels.adult;
 }

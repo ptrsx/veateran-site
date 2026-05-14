@@ -33,10 +33,13 @@ type NormalizedQuotePayload = {
   eventDate: string;
   eventLocation: string;
   eventType: string;
-  guestCount: string;
+  adultGuestCount: number;
+  childGuestCount: number;
+  guestCount: number;
   interestedIn: string;
   message: string;
-  selectedMenuItems: QuoteMenuItem[];
+  selectedAdultMenuItems: QuoteMenuItem[];
+  selectedChildMenuItems: QuoteMenuItem[];
 };
 
 const menuCategories: QuoteMenuItemCategory[] = ["food", "drinks"];
@@ -55,6 +58,10 @@ function getFirstString(payload: QuotePayload, keys: string[]) {
   }
 
   return "";
+}
+
+function hasOwnPayloadKey(payload: QuotePayload, key: string) {
+  return Object.prototype.hasOwnProperty.call(payload, key);
 }
 
 function getBoolean(value: unknown) {
@@ -78,25 +85,92 @@ function getNullableString(value: string) {
   return value || null;
 }
 
-function getNullablePositiveInteger(value: string) {
-  if (!value) {
-    return null;
-  }
-
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
-}
-
 function getCustomerType(value: unknown): QuoteRequestCustomerType {
   const candidate = getString(value);
   return isQuoteRequestCustomerType(candidate) ? candidate : "individual";
 }
 
-function getSelectedMenuItems(payload: QuotePayload) {
-  return normalizeSelectedMenuItems(payload.selectedMenuItems ?? payload.selected_menu_items);
+function getCountString(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(value);
+  }
+
+  return getString(value);
 }
 
-function getMenuText(items: QuoteMenuItem[]) {
+function readGuestCount(payload: QuotePayload, keys: string[]) {
+  for (const key of keys) {
+    if (!hasOwnPayloadKey(payload, key)) {
+      continue;
+    }
+
+    const value = getCountString(payload[key]);
+
+    if (!value) {
+      return { found: true, invalid: false, value: null };
+    }
+
+    if (!/^\d+$/.test(value)) {
+      return { found: true, invalid: true, value: null };
+    }
+
+    const parsed = Number.parseInt(value, 10);
+    return {
+      found: true,
+      invalid: !Number.isFinite(parsed),
+      value: Number.isFinite(parsed) ? parsed : null,
+    };
+  }
+
+  return { found: false, invalid: false, value: null };
+}
+
+function getGuestCounts(payload: QuotePayload) {
+  const adultCount = readGuestCount(payload, ["adultGuestCount", "adult_guest_count"]);
+  const childCount = readGuestCount(payload, ["childGuestCount", "child_guest_count"]);
+  const legacyGuestCount = readGuestCount(payload, ["guestCount", "guest_count"]);
+
+  if (adultCount.invalid || childCount.invalid || legacyGuestCount.invalid) {
+    return null;
+  }
+
+  if (!adultCount.found && !childCount.found && legacyGuestCount.found) {
+    const legacyValue = legacyGuestCount.value ?? 0;
+    return {
+      adultGuestCount: legacyValue,
+      childGuestCount: 0,
+      guestCount: legacyValue,
+    };
+  }
+
+  const adultGuestCount = adultCount.value ?? 0;
+  const childGuestCount = childCount.value ?? 0;
+
+  return {
+    adultGuestCount,
+    childGuestCount,
+    guestCount: adultGuestCount + childGuestCount,
+  };
+}
+
+function getSelectedAdultMenuItems(payload: QuotePayload) {
+  const explicitItems = payload.selectedAdultMenuItems ?? payload.selected_adult_menu_items;
+
+  if (explicitItems !== undefined) {
+    return normalizeSelectedMenuItems(explicitItems, "adult");
+  }
+
+  return normalizeSelectedMenuItems(payload.selectedMenuItems ?? payload.selected_menu_items, "adult");
+}
+
+function getSelectedChildMenuItems(payload: QuotePayload) {
+  return normalizeSelectedMenuItems(
+    payload.selectedChildMenuItems ?? payload.selected_child_menu_items,
+    "child",
+  );
+}
+
+function getMenuTextSection(title: string, items: QuoteMenuItem[]) {
   if (items.length === 0) {
     return "";
   }
@@ -109,10 +183,19 @@ function getMenuText(items: QuoteMenuItem[]) {
       return `${quoteMenuCategoryLabels[category]}:\n${itemLines}`;
     });
 
-  return `Επιλογές μενού:\n${sections.join("\n\n")}`;
+  return `${title}:\n${sections.join("\n\n")}`;
 }
 
-function getMenuHtml(items: QuoteMenuItem[]) {
+function getMenuText(adultItems: QuoteMenuItem[], childItems: QuoteMenuItem[]) {
+  return [
+    getMenuTextSection("Μενού ενηλίκων", adultItems),
+    getMenuTextSection("Μενού παιδιών", childItems),
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function getMenuHtmlSection(title: string, items: QuoteMenuItem[]) {
   if (items.length === 0) {
     return "";
   }
@@ -133,6 +216,26 @@ function getMenuHtml(items: QuoteMenuItem[]) {
     .join("");
 
   return `
+    <div style="margin-top:14px;">
+      <h3 style="margin:0 0 8px;color:#0A5458;font-size:16px;">${escapeHtml(title)}</h3>
+      ${sections}
+    </div>
+  `;
+}
+
+function getMenuHtml(adultItems: QuoteMenuItem[], childItems: QuoteMenuItem[]) {
+  const sections = [
+    getMenuHtmlSection("Μενού ενηλίκων", adultItems),
+    getMenuHtmlSection("Μενού παιδιών", childItems),
+  ]
+    .filter(Boolean)
+    .join("");
+
+  if (!sections) {
+    return "";
+  }
+
+  return `
     <div style="margin-top:18px;padding:16px;background:#ffffff;border:1px solid #eadbb8;">
       <h2 style="margin:0;color:#0A5458;font-size:18px;">Επιλογές μενού</h2>
       ${sections}
@@ -146,10 +249,15 @@ function normalizePayload(payload: QuotePayload): NormalizedQuotePayload {
   const eventDate = getFirstString(payload, ["eventDate", "date", "event_date"]);
   const eventLocation = getFirstString(payload, ["eventLocation", "location"]);
   const eventType = getFirstString(payload, ["eventType", "event_type"]);
-  const guestCount = getFirstString(payload, ["guestCount", "guest_count"]);
   const interestedIn = getFirstString(payload, ["interestedIn", "interested_in"]);
   const message = getFirstString(payload, ["message", "notes"]);
-  const selectedMenuItems = getSelectedMenuItems(payload);
+  const guestCounts = getGuestCounts(payload);
+  const selectedAdultMenuItems = getSelectedAdultMenuItems(payload);
+  const selectedChildMenuItems = getSelectedChildMenuItems(payload);
+
+  if (!guestCounts) {
+    throw new Error("Invalid guest counts.");
+  }
 
   if (customerType === "business") {
     const businessName = getFirstString(payload, ["businessName", "business_name"]);
@@ -176,10 +284,13 @@ function normalizePayload(payload: QuotePayload): NormalizedQuotePayload {
       eventDate,
       eventLocation,
       eventType,
-      guestCount,
+      adultGuestCount: guestCounts.adultGuestCount,
+      childGuestCount: guestCounts.childGuestCount,
+      guestCount: guestCounts.guestCount,
       interestedIn,
       message,
-      selectedMenuItems,
+      selectedAdultMenuItems,
+      selectedChildMenuItems,
     };
   }
 
@@ -203,15 +314,22 @@ function normalizePayload(payload: QuotePayload): NormalizedQuotePayload {
     eventDate,
     eventLocation,
     eventType,
-    guestCount,
+    adultGuestCount: guestCounts.adultGuestCount,
+    childGuestCount: guestCounts.childGuestCount,
+    guestCount: guestCounts.guestCount,
     interestedIn,
     message,
-    selectedMenuItems,
+    selectedAdultMenuItems,
+    selectedChildMenuItems,
   };
 }
 
 function isValidPayload(values: NormalizedQuotePayload) {
   if (!values.eventType) {
+    return false;
+  }
+
+  if (values.guestCount <= 0) {
     return false;
   }
 
@@ -260,7 +378,9 @@ function getEmailRows(values: NormalizedQuotePayload) {
     ["Ημερομηνία εκδήλωσης", values.eventDate || "-"],
     ["Τοποθεσία εκδήλωσης", values.eventLocation || "-"],
     ["Τύπος εκδήλωσης", values.eventType],
-    ["Αριθμός καλεσμένων", values.guestCount || "-"],
+    ["Αριθμός ενηλίκων", String(values.adultGuestCount)],
+    ["Αριθμός παιδιών", String(values.childGuestCount)],
+    ["Σύνολο καλεσμένων", String(values.guestCount)],
     ["Ενδιαφέρομαι για", values.interestedIn || "-"],
     ["Σημειώσεις", values.message || "Δεν συμπληρώθηκαν"],
   ];
@@ -275,7 +395,13 @@ export async function POST(request: Request) {
     return Response.json({ error: "Invalid request body." }, { status: 400 });
   }
 
-  const values = normalizePayload(payload);
+  let values: NormalizedQuotePayload;
+
+  try {
+    values = normalizePayload(payload);
+  } catch {
+    return Response.json({ error: "Missing or invalid required fields." }, { status: 400 });
+  }
 
   if (!isValidPayload(values)) {
     return Response.json({ error: "Missing or invalid required fields." }, { status: 400 });
@@ -303,7 +429,7 @@ export async function POST(request: Request) {
   });
 
   const rows = getEmailRows(values);
-  const menuText = getMenuText(values.selectedMenuItems);
+  const menuText = getMenuText(values.selectedAdultMenuItems, values.selectedChildMenuItems);
   const text = [rows.map(([label, value]) => `${label}: ${value}`).join("\n"), menuText]
     .filter(Boolean)
     .join("\n\n");
@@ -333,7 +459,7 @@ export async function POST(request: Request) {
           <table style="width:100%;border-collapse:collapse;background:#ffffff;border:1px solid #eadbb8;">
             ${htmlRows}
           </table>
-          ${getMenuHtml(values.selectedMenuItems)}
+          ${getMenuHtml(values.selectedAdultMenuItems, values.selectedChildMenuItems)}
         </div>
       `,
     });
@@ -356,11 +482,15 @@ export async function POST(request: Request) {
     contact_phone: values.customerType === "business" ? getNullableString(values.contactPhone) : null,
     contact_email: values.customerType === "business" ? getNullableString(values.contactEmail) : null,
     invoice_required: values.invoiceRequired,
-    selected_menu_items: values.selectedMenuItems,
+    selected_menu_items: values.selectedAdultMenuItems,
+    adult_guest_count: values.adultGuestCount,
+    child_guest_count: values.childGuestCount,
+    selected_adult_menu_items: values.selectedAdultMenuItems,
+    selected_child_menu_items: values.selectedChildMenuItems,
     event_type: values.eventType,
     event_date: getNullableString(values.eventDate),
     location: getNullableString(values.eventLocation),
-    guest_count: getNullablePositiveInteger(values.guestCount),
+    guest_count: values.guestCount,
     interested_in: getNullableString(values.interestedIn),
     notes: getNullableString(values.message),
     source: "website",

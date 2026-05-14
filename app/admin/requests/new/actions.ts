@@ -35,7 +35,7 @@ function getNullablePositiveNumber(formData: FormData, key: string) {
   return parsed;
 }
 
-function getNullablePositiveInteger(formData: FormData, key: string) {
+function getNullableNonNegativeInteger(formData: FormData, key: string) {
   const value = getString(formData, key);
 
   if (!value) {
@@ -43,13 +43,13 @@ function getNullablePositiveInteger(formData: FormData, key: string) {
   }
 
   if (!/^\d+$/.test(value)) {
-    throw new Error("Invalid positive integer.");
+    throw new Error("Invalid non-negative integer.");
   }
 
   const parsed = Number.parseInt(value, 10);
 
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    throw new Error("Invalid positive integer.");
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    throw new Error("Invalid non-negative integer.");
   }
 
   return parsed;
@@ -75,18 +75,31 @@ export async function createManualQuoteRequest(formData: FormData) {
   let quoteRequest: QuoteRequestInsert;
 
   try {
+    const adultGuestCount = getNullableNonNegativeInteger(formData, "adult_guest_count");
+    const childGuestCount = getNullableNonNegativeInteger(formData, "child_guest_count");
+    const guestCount =
+      adultGuestCount === null && childGuestCount === null
+        ? null
+        : (adultGuestCount ?? 0) + (childGuestCount ?? 0);
+
+    if (guestCount !== null && guestCount <= 0) {
+      throw new Error("Invalid guest breakdown.");
+    }
+
     const commonFields = {
       status,
       event_type: eventType,
       event_date: getNullableString(formData, "event_date"),
       location: getNullableString(formData, "location"),
-      guest_count: getNullablePositiveInteger(formData, "guest_count"),
+      adult_guest_count: adultGuestCount,
+      child_guest_count: childGuestCount,
+      guest_count: guestCount,
       interested_in: getNullableString(formData, "interested_in"),
       notes: getNullableString(formData, "notes"),
       internal_notes: getNullableString(formData, "internal_notes"),
       price_per_person: getNullablePositiveNumber(formData, "price_per_person"),
       quoted_total: getNullablePositiveNumber(formData, "quoted_total"),
-      final_guest_count: getNullablePositiveInteger(formData, "final_guest_count"),
+      final_guest_count: getNullableNonNegativeInteger(formData, "final_guest_count"),
       final_total: getNullablePositiveNumber(formData, "final_total"),
       deposit_amount: getNullablePositiveNumber(formData, "deposit_amount"),
       source,

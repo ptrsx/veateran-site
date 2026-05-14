@@ -43,7 +43,7 @@ function getNullableInteger(formData: FormData, key: string) {
 
   const parsed = Number.parseInt(value, 10);
 
-  if (!Number.isFinite(parsed) || parsed < 0) {
+  if (!/^\d+$/.test(value) || !Number.isFinite(parsed) || parsed < 0) {
     throw new Error("Invalid integer value.");
   }
 
@@ -62,8 +62,22 @@ export async function updateQuoteRequest(id: string, formData: FormData) {
   let update: QuoteRequestUpdate;
 
   try {
+    const adultGuestCount = getNullableInteger(formData, "adult_guest_count");
+    const childGuestCount = getNullableInteger(formData, "child_guest_count");
+    const guestCount =
+      adultGuestCount === null && childGuestCount === null
+        ? null
+        : (adultGuestCount ?? 0) + (childGuestCount ?? 0);
+
+    if (guestCount !== null && guestCount <= 0) {
+      throw new Error("Invalid guest breakdown.");
+    }
+
     update = {
       status,
+      adult_guest_count: adultGuestCount,
+      child_guest_count: childGuestCount,
+      guest_count: guestCount,
       internal_notes: getNullableString(formData, "internal_notes"),
       price_per_person: getNullableNumber(formData, "price_per_person"),
       quoted_total: getNullableNumber(formData, "quoted_total"),

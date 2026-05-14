@@ -41,6 +41,14 @@ function normalizeQuote(value: Record<string, unknown>): Quote {
     event_type: typeof value.event_type === "string" ? value.event_type : null,
     event_date: typeof value.event_date === "string" ? value.event_date : null,
     event_location: typeof value.event_location === "string" ? value.event_location : null,
+    adult_guest_count:
+      value.adult_guest_count === null || value.adult_guest_count === undefined
+        ? null
+        : Number(value.adult_guest_count),
+    child_guest_count:
+      value.child_guest_count === null || value.child_guest_count === undefined
+        ? null
+        : Number(value.child_guest_count),
     guest_count: value.guest_count === null || value.guest_count === undefined ? null : Number(value.guest_count),
     subtotal_net: Number(value.subtotal_net) || 0,
     vat_amount: Number(value.vat_amount) || 0,
@@ -61,6 +69,10 @@ function normalizeQuoteItem(value: Record<string, unknown>): QuoteItem {
     product_id: typeof value.product_id === "string" ? value.product_id : null,
     product_name: String(value.product_name),
     category: String(value.category) as QuoteItem["category"],
+    audience:
+      value.audience === "adult" || value.audience === "child" || value.audience === "service"
+        ? value.audience
+        : null,
     unit: String(value.unit) as QuoteItem["unit"],
     quantity: Number(value.quantity) || 0,
     unit_price_net: Number(value.unit_price_net) || 0,

@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 
 import { requireAdminSession } from "@/lib/adminAuth";
 import {
+  isQuoteProductAudience,
   isQuoteProductCategory,
   isQuoteProductUnit,
   type QuoteProductInsert,
@@ -60,15 +61,22 @@ function getInteger(formData: FormData, key: string, defaultValue = 0) {
 function getProductFields(formData: FormData): QuoteProductInsert {
   const name = getString(formData, "name");
   const category = getString(formData, "category");
+  const audience = getString(formData, "audience");
   const unit = getString(formData, "unit");
 
-  if (!name || !isQuoteProductCategory(category) || !isQuoteProductUnit(unit)) {
+  if (
+    !name ||
+    !isQuoteProductCategory(category) ||
+    !isQuoteProductAudience(audience) ||
+    !isQuoteProductUnit(unit)
+  ) {
     throw new Error("Invalid product fields.");
   }
 
   return {
     name,
     category,
+    audience,
     unit,
     price_net: getNonNegativeNumber(formData, "price_net"),
     vat_rate: getNonNegativeNumber(formData, "vat_rate", 24),

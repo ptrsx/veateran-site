@@ -7,6 +7,7 @@ import { requireAdminSession } from "@/lib/adminAuth";
 import {
   calculateQuoteItemLineTotal,
   calculateQuoteTotals,
+  isQuoteItemAudience,
   isQuoteStatus,
   type QuoteItemInput,
 } from "@/lib/crm/quotes";
@@ -63,10 +64,16 @@ function getQuoteItemsFromForm(formData: FormData) {
 
   return rowKeys.map<QuoteItemInput>((rowKey, index) => {
     const productName = getString(formData, `product_name_${rowKey}`);
+    const audience = getString(formData, `audience_${rowKey}`);
     const category = getString(formData, `category_${rowKey}`);
     const unit = getString(formData, `unit_${rowKey}`);
 
-    if (!productName || !isQuoteProductCategory(category) || !isQuoteProductUnit(unit)) {
+    if (
+      !productName ||
+      (audience && !isQuoteItemAudience(audience)) ||
+      !isQuoteProductCategory(category) ||
+      !isQuoteProductUnit(unit)
+    ) {
       throw new Error("Invalid quote item.");
     }
 
@@ -75,6 +82,7 @@ function getQuoteItemsFromForm(formData: FormData) {
       product_id: getNullableString(formData, `product_id_${rowKey}`),
       product_name: productName,
       category,
+      audience: audience ? (audience as QuoteItemInput["audience"]) : null,
       unit,
       quantity: getNonNegativeNumber(formData, `quantity_${rowKey}`),
       unit_price_net: getNonNegativeNumber(formData, `unit_price_net_${rowKey}`),
@@ -140,6 +148,7 @@ export async function updateQuote(formData: FormData) {
       product_id: item.product_id || null,
       product_name: item.product_name,
       category: item.category,
+      audience: item.audience ?? null,
       unit: item.unit,
       quantity: item.quantity,
       unit_price_net: item.unit_price_net,
