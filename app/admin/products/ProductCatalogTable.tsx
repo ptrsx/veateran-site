@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { type FormEvent, useState } from "react";
 
-import { createQuoteProduct, updateQuoteProduct } from "@/app/admin/products/actions";
+import { createQuoteProduct, deleteQuoteProduct, updateQuoteProduct } from "@/app/admin/products/actions";
 import { formatCurrency, formatNumber } from "@/lib/crm/formatters";
 import {
   getQuoteProductAudienceLabel,
@@ -123,6 +123,12 @@ export function ProductCatalogTable({ products }: { products: QuoteProduct[] }) 
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
 
+  function confirmProductDelete(event: FormEvent<HTMLFormElement>) {
+    if (!window.confirm("Θέλεις σίγουρα να διαγράψεις αυτό το προϊόν;")) {
+      event.preventDefault();
+    }
+  }
+
   return (
     <div className="mt-6 space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -235,16 +241,27 @@ export function ProductCatalogTable({ products }: { products: QuoteProduct[] }) 
                     </td>
                     <td className="whitespace-nowrap px-4 py-3">{product.sort_order}</td>
                     <td className="whitespace-nowrap px-4 py-3">
-                      <button
-                        className={`${actionButtonClass} border border-[#d9b76f]/40 text-[#0A5458] hover:bg-[#0A5458]/10`}
-                        onClick={() => {
-                          setIsCreating(false);
-                          setEditingProductId(product.id);
-                        }}
-                        type="button"
-                      >
-                        Επεξεργασία
-                      </button>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          className={`${actionButtonClass} border border-[#d9b76f]/40 text-[#0A5458] hover:bg-[#0A5458]/10`}
+                          onClick={() => {
+                            setIsCreating(false);
+                            setEditingProductId(product.id);
+                          }}
+                          type="button"
+                        >
+                          Επεξεργασία
+                        </button>
+                        <form action={deleteQuoteProduct} onSubmit={confirmProductDelete}>
+                          <input name="id" type="hidden" value={product.id} />
+                          <button
+                            className={`${actionButtonClass} border border-red-200 text-red-700 hover:bg-red-50`}
+                            type="submit"
+                          >
+                            Διαγραφή
+                          </button>
+                        </form>
+                      </div>
                     </td>
                   </tr>
                 );

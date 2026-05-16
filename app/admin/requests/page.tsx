@@ -87,9 +87,15 @@ export default async function RequestsPage({ searchParams }: RequestsPageProps) 
   const createdTo = getParam(params, "createdTo");
   const eventFrom = getParam(params, "eventFrom");
   const eventTo = getParam(params, "eventTo");
+  const showDeleted = getParam(params, "showDeleted") === "1";
+  const deletedMessage = getParam(params, "deleted");
 
   const supabase = createSupabaseAdminClient();
   let query = supabase.from("quote_requests").select("*").order("created_at", { ascending: false });
+
+  if (!showDeleted) {
+    query = query.is("deleted_at", null);
+  }
 
   if (search) {
     const escapedSearch = search.replaceAll("%", "\\%").replaceAll(",", "\\,");
@@ -180,6 +186,12 @@ export default async function RequestsPage({ searchParams }: RequestsPageProps) 
           );
         })}
       </div>
+
+      {deletedMessage === "1" ? (
+        <p className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-800">
+          Το αίτημα διαγράφηκε από τις ενεργές λίστες.
+        </p>
+      ) : null}
 
       <form className="mt-6 rounded-2xl border border-[#d9b76f]/25 bg-white/80 p-5 shadow-lg shadow-[#0A5458]/5">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -308,6 +320,16 @@ export default async function RequestsPage({ searchParams }: RequestsPageProps) 
               type="date"
             />
           </label>
+          <label className="flex items-center gap-3 rounded-xl border border-[#d9b76f]/25 bg-[#fffaf0]/70 px-3 py-3 text-sm font-semibold text-[#0A5458] xl:mt-7">
+            <input
+              className="h-4 w-4 accent-[#0A5458]"
+              defaultChecked={showDeleted}
+              name="showDeleted"
+              type="checkbox"
+              value="1"
+            />
+            Εμφάνιση διαγραμμένων
+          </label>
         </div>
         <div className="mt-5 flex flex-wrap gap-3">
           <button className="rounded-full bg-[#0A5458] px-5 py-2.5 text-sm font-bold text-white" type="submit">
@@ -367,6 +389,11 @@ export default async function RequestsPage({ searchParams }: RequestsPageProps) 
                     <td className="whitespace-nowrap px-4 py-3">{getCustomerTypeLabel(request.customer_type)}</td>
                     <td className="whitespace-nowrap px-4 py-3">
                       <span className="font-semibold">{displayName}</span>
+                      {request.deleted_at ? (
+                        <span className="ml-2 inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-bold text-amber-800">
+                          Διαγραμμένο
+                        </span>
+                      ) : null}
                       {isBusiness && request.contact_name ? (
                         <span className="mt-1 block text-xs font-medium text-[#5f594f]">Επαφή: {request.contact_name}</span>
                       ) : null}

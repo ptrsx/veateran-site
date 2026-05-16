@@ -107,3 +107,23 @@ export async function updateQuoteRequest(id: string, formData: FormData) {
   revalidatePath("/admin/stats");
   redirect(`/admin/requests/${id}?saved=1`);
 }
+
+export async function deleteQuoteRequest(id: string) {
+  await requireAdminSession();
+
+  const supabase = createSupabaseAdminClient();
+  const { error } = await supabase
+    .from("quote_requests")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", id);
+
+  if (error) {
+    console.error("Failed to soft delete quote request.", error);
+    redirect(`/admin/requests/${id}?error=1`);
+  }
+
+  revalidatePath("/admin/requests");
+  revalidatePath(`/admin/requests/${id}`);
+  revalidatePath("/admin/stats");
+  redirect("/admin/requests?deleted=1");
+}

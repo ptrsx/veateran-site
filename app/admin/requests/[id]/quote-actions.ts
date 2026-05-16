@@ -18,7 +18,24 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 const defaultMarginPercent = 30;
 const defaultOfferVatRate = 24;
-const serviceProductKeys = ["van-rental-cost", "transport-cost", "staff-cost", "consumables-cost"];
+const serviceProductConfigs = [
+  {
+    productKey: "van-rental-cost",
+    names: ["Κόστος ενοικίασης van", "Ενοικίαση van"],
+  },
+  {
+    productKey: "transport-cost",
+    names: ["Έξοδα μεταφοράς", "Κόστος μεταφοράς"],
+  },
+  {
+    productKey: "staff-cost",
+    names: ["Προσωπικό", "Κόστος προσωπικού"],
+  },
+  {
+    productKey: "consumables-cost",
+    names: ["Αναλώσιμα"],
+  },
+] as const;
 
 function normalizeText(value: string) {
   return value.trim().toLocaleLowerCase("el-GR");
@@ -114,11 +131,16 @@ function getMenuQuoteItems(
 }
 
 function getServiceQuoteItems(products: QuoteProduct[]) {
-  return serviceProductKeys
-    .map<QuoteItemInput | null>((productKey, index) => {
-      const product = products.find(
-        (candidate) => candidate.product_key === productKey && candidate.audience === "service",
-      );
+  return serviceProductConfigs
+    .map<QuoteItemInput | null>((config, index) => {
+      const normalizedNames = config.names.map(normalizeText);
+      const product = products.find((candidate) => {
+        if (candidate.audience !== "service") {
+          return false;
+        }
+
+        return candidate.product_key === config.productKey || normalizedNames.includes(normalizeText(candidate.name));
+      });
 
       if (!product) {
         return null;

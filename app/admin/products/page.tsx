@@ -9,6 +9,8 @@ type ProductsPageProps = {
   searchParams: Promise<{
     created?: string;
     saved?: string;
+    deleted?: string;
+    deactivated?: string;
     error?: string;
   }>;
 };
@@ -61,6 +63,16 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
       {messages.saved === "1" ? (
         <p className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-800">
           Οι αλλαγές αποθηκεύτηκαν.
+        </p>
+      ) : null}
+      {messages.deleted === "1" ? (
+        <p className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-800">
+          Το προϊόν διαγράφηκε.
+        </p>
+      ) : null}
+      {messages.deactivated === "1" ? (
+        <p className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-800">
+          Το προϊόν έχει χρησιμοποιηθεί σε προσφορές και θα απενεργοποιηθεί αντί να διαγραφεί.
         </p>
       ) : null}
       {messages.error === "1" || error ? (

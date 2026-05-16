@@ -24,6 +24,8 @@ const foodMenuItems = [
   { id: "makaronosalata", label: "Μακαρονοσαλάτα", category: "food" },
   { id: "spring-rolls", label: "Spring rolls", category: "food" },
   { id: "kalamakia", label: "Καλαμάκια", category: "food" },
+  { id: "keftedakia", label: "Κεφτεδάκια", category: "food" },
+  { id: "kotompoukies", label: "Κοτομπουκιές", category: "food" },
   { id: "pita-club-kotopoulo", label: "Πίτα club κοτόπουλο", category: "food" },
   { id: "mpompa", label: "Μπόμπα", category: "food" },
   { id: "bao-bun", label: "Bao bun", category: "food" },

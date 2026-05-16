@@ -30,6 +30,7 @@ export type QuoteRequest = {
   id: string;
   created_at: string;
   updated_at: string;
+  deleted_at: string | null;
   status: QuoteRequestStatus;
   customer_type: QuoteRequestCustomerType;
   name: string;
@@ -72,6 +73,7 @@ export type QuoteRequest = {
 };
 
 export type QuoteRequestInsert = {
+  deleted_at?: string | null;
   status?: QuoteRequestStatus;
   customer_type?: QuoteRequestCustomerType;
   name: string;

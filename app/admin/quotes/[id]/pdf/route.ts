@@ -7,20 +7,59 @@ import type { Content, TableCell, TDocumentDefinitions } from "pdfmake/interface
 
 import { requireAdminSession } from "@/lib/adminAuth";
 import { formatCurrency, formatDate } from "@/lib/crm/formatters";
-import { quoteItemGroupLabels, quoteStatusLabels, type Quote, type QuoteItem } from "@/lib/crm/quotes";
-import { quoteProductCategoryLabels, quoteProductUnitLabels } from "@/lib/crm/products";
+import {
+  getQuoteItemLineType,
+  isConsumablesCost,
+  isStaffCost,
+  isTransportCost,
+  isVanRentalCost,
+  type Quote,
+  type QuoteItem,
+} from "@/lib/crm/quotes";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
 
 const brand = {
   teal: "#0A5458",
-  ivory: "#fffaf0",
-  softGold: "#d9b76f",
-  paleGold: "#eadbb8",
+  gold: "#C59A4B",
+  cream: "#F8F4ED",
+  paper: "#FCFAF6",
+  line: "#D9C7A7",
   darkText: "#2f2b25",
   mutedText: "#6d6558",
-  termsText: "#5f594f",
+};
+
+const greekToLatin: Record<string, string> = {
+  α: "a",
+  β: "v",
+  γ: "g",
+  δ: "d",
+  ε: "e",
+  ζ: "z",
+  η: "i",
+  θ: "th",
+  ι: "i",
+  κ: "k",
+  λ: "l",
+  μ: "m",
+  ν: "n",
+  ξ: "x",
+  ο: "o",
+  π: "p",
+  ρ: "r",
+  σ: "s",
+  ς: "s",
+  τ: "t",
+  υ: "y",
+  φ: "f",
+  χ: "ch",
+  ψ: "ps",
+  ω: "o",
+};
+
+type QuoteRequestPdfContext = {
+  interested_in: string | null;
 };
 
 let fontsConfigured = false;
@@ -67,6 +106,21 @@ function normalizeQuote(value: Record<string, unknown>): Quote {
         ? null
         : Number(value.child_guest_count),
     guest_count: value.guest_count === null || value.guest_count === undefined ? null : Number(value.guest_count),
+    food_drinks_cost_net: Number(value.food_drinks_cost_net) || 0,
+    van_rental_cost_net: Number(value.van_rental_cost_net) || 0,
+    transport_cost_net: Number(value.transport_cost_net) || 0,
+    staff_cost_net: Number(value.staff_cost_net) || 0,
+    consumables_cost_net: Number(value.consumables_cost_net) || 0,
+    extra_costs_net: Number(value.extra_costs_net) || 0,
+    total_cost_net: Number(value.total_cost_net) || 0,
+    margin_percent:
+      value.margin_percent === null || value.margin_percent === undefined ? 30 : Number(value.margin_percent),
+    offer_net: Number(value.offer_net) || Number(value.subtotal_net) || 0,
+    profit_net: Number(value.profit_net) || 0,
+    offer_vat_rate:
+      value.offer_vat_rate === null || value.offer_vat_rate === undefined ? 24 : Number(value.offer_vat_rate),
+    offer_vat_amount: Number(value.offer_vat_amount) || Number(value.vat_amount) || 0,
+    offer_gross: Number(value.offer_gross) || Number(value.total_gross) || 0,
     subtotal_net: Number(value.subtotal_net) || 0,
     vat_amount: Number(value.vat_amount) || 0,
     total_gross: Number(value.total_gross) || 0,
@@ -95,6 +149,13 @@ function normalizeQuoteItem(value: Record<string, unknown>): QuoteItem {
     unit_price_net: Number(value.unit_price_net) || 0,
     vat_rate: Number(value.vat_rate) || 0,
     line_total_net: Number(value.line_total_net) || 0,
+    line_type:
+      value.line_type === "menu" || value.line_type === "service" || value.line_type === "extra"
+        ? value.line_type
+        : value.audience === "service" || value.category === "service"
+          ? "service"
+          : "menu",
+    is_extra_expense: value.is_extra_expense === true,
     sort_order: Number(value.sort_order) || 0,
     notes: typeof value.notes === "string" ? value.notes : null,
   };
@@ -110,22 +171,40 @@ async function getLogoDataUrl() {
   }
 }
 
-function detailLine(label: string, value?: string | number | null) {
-  if (value === null || value === undefined || value === "") {
-    return null;
-  }
-
-  return {
-    text: [
-      { text: `${label}: `, bold: true, color: brand.teal },
-      String(value),
-    ],
-    margin: [0, 0, 0, 4],
-  } satisfies Content;
-}
-
 function compactContent(items: Array<Content | null>) {
   return items.filter((item): item is Content => item !== null);
+}
+
+function getQuoteGuestBreakdown(quote: Quote) {
+  const adultGuestCount = quote.adult_guest_count ?? quote.guest_count;
+  const childGuestCount = quote.child_guest_count ?? 0;
+  const totalGuestCount =
+    quote.guest_count ??
+    ((adultGuestCount ?? 0) + (childGuestCount ?? 0) || null);
+
+  return {
+    adultGuestCount,
+    childGuestCount,
+    totalGuestCount,
+  };
+}
+
+function getGuestDisplay(quote: Quote) {
+  const { adultGuestCount, childGuestCount, totalGuestCount } = getQuoteGuestBreakdown(quote);
+
+  if ((adultGuestCount ?? 0) > 0 || (childGuestCount ?? 0) > 0) {
+    return `${adultGuestCount ?? 0} ενήλικες + ${childGuestCount ?? 0} παιδιά`;
+  }
+
+  return totalGuestCount === null || totalGuestCount === undefined ? null : String(totalGuestCount);
+}
+
+function getOfferService(context: QuoteRequestPdfContext | null) {
+  return context?.interested_in || "Food & Bar";
+}
+
+function getOfferSubtitle(quote: Quote) {
+  return quote.event_type ? `Food & Bar για ${quote.event_type}` : "Food & Bar για την εκδήλωσή σας";
 }
 
 function getPageBackground() {
@@ -142,12 +221,12 @@ function getPageBackground() {
       paddingBottom: () => 0,
       paddingLeft: () => 0,
       paddingRight: () => 0,
-      fillColor: () => brand.ivory,
+      fillColor: () => brand.cream,
     },
   } satisfies Content;
 }
 
-function getGoldDivider() {
+function getDivider(margin: [number, number, number, number] = [0, 18, 0, 18]) {
   return {
     table: {
       widths: ["*"],
@@ -157,14 +236,186 @@ function getGoldDivider() {
     layout: {
       hLineWidth: (rowIndex: number) => (rowIndex === 0 ? 1 : 0),
       vLineWidth: () => 0,
-      hLineColor: () => brand.softGold,
+      hLineColor: () => brand.line,
       paddingTop: () => 0,
       paddingBottom: () => 0,
       paddingLeft: () => 0,
       paddingRight: () => 0,
     },
-    margin: [0, 22, 0, 18],
+    margin,
   } satisfies Content;
+}
+
+function getDetailRows(rows: Array<[string, string | number | null | undefined]>) {
+  return rows
+    .filter(([, value]) => value !== null && value !== undefined && value !== "")
+    .map<TableCell[]>(([label, value]) => [
+      { text: label, bold: true, color: brand.teal },
+      { text: String(value), color: brand.darkText },
+    ]);
+}
+
+function getDetailsGrid(quote: Quote, context: QuoteRequestPdfContext | null) {
+  const rows = getDetailRows([
+    ["Ονοματεπώνυμο / Πελάτης", quote.customer_name],
+    ["Τηλέφωνο", quote.customer_phone],
+    ["Email", quote.customer_email],
+    ["Ημερομηνία εκδήλωσης", formatDate(quote.event_date)],
+    ["Τοποθεσία εκδήλωσης", quote.event_location],
+    ["Τύπος εκδήλωσης", quote.event_type],
+    ["Αριθμός καλεσμένων", getGuestDisplay(quote)],
+    ["Υπηρεσία", getOfferService(context)],
+  ]);
+
+  const body: TableCell[][] = [];
+
+  for (let index = 0; index < rows.length; index += 2) {
+    const first = rows[index];
+    const second = rows[index + 1] ?? [{ text: "" }, { text: "" }];
+    body.push([first[0], first[1], second[0], second[1]]);
+  }
+
+  return {
+    table: {
+      widths: [95, "*", 95, "*"],
+      body,
+    },
+    layout: {
+      hLineColor: () => brand.line,
+      vLineColor: () => brand.line,
+      paddingTop: () => 7,
+      paddingBottom: () => 7,
+      paddingLeft: () => 8,
+      paddingRight: () => 8,
+      fillColor: (rowIndex: number) => (rowIndex % 2 === 0 ? brand.paper : "#ffffff"),
+    },
+  } satisfies Content;
+}
+
+function getMenuItemsByCategory(items: QuoteItem[], category: "food" | "drinks") {
+  return items.filter((item) => getQuoteItemLineType(item) === "menu" && item.category === category);
+}
+
+function getMenuBullets(items: QuoteItem[]) {
+  const adultItems = items.filter((item) => item.audience === "adult");
+  const childItems = items.filter((item) => item.audience === "child");
+  const otherItems = items.filter((item) => item.audience !== "adult" && item.audience !== "child");
+  const sections: Content[] = [];
+
+  for (const [title, groupItems] of [
+    ["Μενού ενηλίκων", adultItems],
+    ["Μενού παιδιών", childItems],
+    ["", otherItems],
+  ] as const) {
+    if (groupItems.length === 0) {
+      continue;
+    }
+
+    if (title) {
+      sections.push({ text: title, bold: true, color: brand.teal, margin: [0, sections.length === 0 ? 0 : 8, 0, 4] });
+    }
+
+    sections.push({
+      ul: groupItems.map((item) => ({ text: item.product_name, margin: [0, 0, 0, 2] })),
+      margin: [0, 0, 0, 2],
+    });
+  }
+
+  return sections;
+}
+
+function getOfferIncludesContent(items: QuoteItem[]) {
+  const foodItems = getMenuItemsByCategory(items, "food");
+  const drinkItems = getMenuItemsByCategory(items, "drinks");
+
+  return compactContent([
+    { text: "Η Προσφορά Περιλαμβάνει", style: "sectionTitle", margin: [0, 22, 0, 10] },
+    foodItems.length > 0
+      ? {
+          stack: [{ text: "Φαγητό", style: "subsectionTitle" }, ...getMenuBullets(foodItems)],
+          margin: [0, 0, 0, 12],
+        }
+      : null,
+    drinkItems.length > 0
+      ? {
+          stack: [{ text: "Ποτά & Αναψυκτικά", style: "subsectionTitle" }, ...getMenuBullets(drinkItems)],
+          margin: [0, 0, 0, 12],
+        }
+      : null,
+    foodItems.length === 0 && drinkItems.length === 0
+      ? {
+          text: "Το μενού θα οριστικοποιηθεί σύμφωνα με τις τελικές επιλογές της εκδήλωσης.",
+          color: brand.mutedText,
+          margin: [0, 0, 0, 12],
+        }
+      : null,
+  ]);
+}
+
+function isCustomerFacingService(item: QuoteItem) {
+  const notes = (item.notes ?? "").toLocaleLowerCase("el-GR");
+  return !notes.includes("εσωτερ") && !notes.includes("internal");
+}
+
+function getIncludedServices(items: QuoteItem[]) {
+  const serviceItems = items.filter((item) => getQuoteItemLineType(item) === "service");
+  const menuItems = items.filter((item) => getQuoteItemLineType(item) === "menu");
+  const labels = new Set<string>();
+
+  if (menuItems.some((item) => item.category === "food")) {
+    labels.add("Φαγητό / Μενού");
+  }
+
+  if (menuItems.some((item) => item.category === "drinks")) {
+    labels.add("Ποτά & αναψυκτικά");
+  }
+
+  for (const item of serviceItems) {
+    if (isVanRentalCost(item)) {
+      labels.add("Ενοικίαση van");
+    } else if (isTransportCost(item)) {
+      labels.add("Έξοδα μεταφοράς");
+    } else if (isStaffCost(item)) {
+      labels.add("Προσωπικό");
+    } else if (isConsumablesCost(item)) {
+      labels.add("Αναλώσιμα");
+    } else if (isCustomerFacingService(item)) {
+      labels.add(item.product_name);
+    }
+  }
+
+  return Array.from(labels);
+}
+
+function getIncludedServicesContent(items: QuoteItem[]) {
+  const services = getIncludedServices(items);
+
+  if (services.length === 0) {
+    return [];
+  }
+
+  return [
+    { text: "Στην προσφορά περιλαμβάνονται", style: "sectionTitle", margin: [0, 18, 0, 8] },
+    {
+      ul: services.map((service) => ({ text: service, margin: [0, 0, 0, 3] })),
+      color: brand.darkText,
+    },
+  ] satisfies Content[];
+}
+
+function getDescriptionContent(quote: Quote) {
+  const defaultDescription =
+    "Στην εκδήλωση θα στηθεί το The VeatERAN Van ως ένα ολοκληρωμένο food & bar σημείο εξυπηρέτησης, με προσεγμένη παρουσία, φαγητό, ποτά και φιλική εξυπηρέτηση. Η τελική διαμόρφωση μπορεί να προσαρμοστεί ανάλογα με τον χώρο, τον αριθμό καλεσμένων και τις ανάγκες της εκδήλωσης.";
+
+  return compactContent([
+    { text: "Περιγραφή Υπηρεσίας", style: "sectionTitle", margin: [0, 16, 0, 8] },
+    { text: defaultDescription },
+    quote.public_notes ? { text: quote.public_notes, margin: [0, 8, 0, 0] } : null,
+  ]);
+}
+
+function getFinalOfferNet(quote: Quote) {
+  return quote.offer_net || quote.subtotal_net || quote.total_gross || 0;
 }
 
 function assertCanvasValuesAreArrays(value: unknown, pathName = "documentDefinition") {
@@ -190,164 +441,54 @@ function assertCanvasValuesAreArrays(value: unknown, pathName = "documentDefinit
   }
 }
 
-function getCustomerContent(quote: Quote) {
-  const businessDetails =
-    quote.customer_type === "business"
-      ? compactContent([
-          detailLine("Επωνυμία", quote.business_name),
-          detailLine("ΑΦΜ", quote.business_vat),
-          detailLine("ΔΟΥ", quote.business_tax_office),
-          detailLine("Διεύθυνση", quote.business_address),
-          detailLine("Όνομα επαφής", quote.contact_name),
-          detailLine("Email επαφής", quote.contact_email),
-          detailLine("Τηλέφωνο επαφής", quote.contact_phone),
-        ])
-      : [];
-
-  return compactContent([
-    detailLine("Πελάτης", quote.customer_name),
-    detailLine("Email", quote.customer_email),
-    detailLine("Τηλέφωνο", quote.customer_phone),
-    ...businessDetails,
-  ]);
-}
-
-function getQuoteGuestBreakdown(quote: Quote) {
-  const adultGuestCount = quote.adult_guest_count ?? quote.guest_count;
-  const childGuestCount = quote.child_guest_count ?? 0;
-  const totalGuestCount =
-    quote.guest_count ??
-    ((adultGuestCount ?? 0) + (childGuestCount ?? 0) || null);
-
-  return {
-    adultGuestCount,
-    childGuestCount,
-    totalGuestCount,
-  };
-}
-
-function getItemGroup(item: QuoteItem) {
-  if (item.audience === "adult" || item.audience === "child" || item.audience === "service") {
-    return item.audience;
-  }
-
-  return item.category === "service" ? "service" : "other";
-}
-
-function getItemsTable(items: QuoteItem[]) {
-  const body: TableCell[][] = [
-    [
-      { text: "Προϊόν", style: "tableHeader" },
-      { text: "Κατηγορία", style: "tableHeader" },
-      { text: "Μονάδα", style: "tableHeader" },
-      { text: "Ποσότητα", style: "tableHeader", alignment: "right" },
-      { text: "Τιμή προ ΦΠΑ", style: "tableHeader", alignment: "right" },
-      { text: "ΦΠΑ %", style: "tableHeader", alignment: "right" },
-      { text: "Σύνολο προ ΦΠΑ", style: "tableHeader", alignment: "right" },
-    ],
-  ];
-
-  for (const item of items) {
-    body.push([
-      {
-        stack: compactContent([
-          { text: item.product_name, bold: true },
-          item.notes ? { text: item.notes, color: brand.mutedText, fontSize: 8, margin: [0, 2, 0, 0] } : null,
-        ]),
-      },
-      quoteProductCategoryLabels[item.category],
-      quoteProductUnitLabels[item.unit],
-      { text: String(item.quantity), alignment: "right" },
-      { text: formatCurrency(item.unit_price_net), alignment: "right" },
-      { text: `${item.vat_rate}%`, alignment: "right" },
-      { text: formatCurrency(item.line_total_net), alignment: "right", bold: true },
-    ]);
-  }
-
-  return {
-    table: {
-      headerRows: 1,
-      widths: ["*", 72, 70, 48, 70, 42, 78],
-      body,
-    },
-    layout: {
-      fillColor: (rowIndex: number) => (rowIndex === 0 ? brand.teal : rowIndex % 2 === 0 ? brand.ivory : null),
-      hLineColor: () => brand.paleGold,
-      vLineColor: () => brand.paleGold,
-      paddingTop: () => 7,
-      paddingBottom: () => 7,
-      paddingLeft: () => 7,
-      paddingRight: () => 7,
-    },
-  } satisfies Content;
-}
-
-function getItemsContent(quote: Quote, items: QuoteItem[]) {
-  const guestBreakdown = getQuoteGuestBreakdown(quote);
-  const groups = (["adult", "child", "service", "other"] as const)
-    .map((group) => {
-      const groupItems = items.filter((item) => getItemGroup(item) === group);
-      const enabled =
-        (group === "adult" && (guestBreakdown.adultGuestCount ?? 0) > 0) ||
-        (group === "child" && (guestBreakdown.childGuestCount ?? 0) > 0) ||
-        group === "service" ||
-        group === "other";
-
-      return {
-        group,
-        items: enabled ? groupItems : [],
-      };
-    })
-    .filter((group) => group.items.length > 0);
-
-  if (groups.length === 0) {
-    return [
-      {
-        text: "Δεν υπάρχουν γραμμές στην προσφορά.",
-        color: brand.mutedText,
-        margin: [0, 0, 0, 12],
-      },
-    ] satisfies Content[];
-  }
-
-  return groups.flatMap((group) => [
-    {
-      text: quoteItemGroupLabels[group.group],
-      style: "sectionTitle",
-      margin: [0, group.group === groups[0].group ? 0 : 18, 0, 8],
-    } satisfies Content,
-    getItemsTable(group.items),
-  ]);
-}
-
-function getDocumentDefinition(quote: Quote, items: QuoteItem[], logoDataUrl: string | null): TDocumentDefinitions {
-  const guestBreakdown = getQuoteGuestBreakdown(quote);
+function getDocumentDefinition(
+  quote: Quote,
+  items: QuoteItem[],
+  context: QuoteRequestPdfContext | null,
+  logoDataUrl: string | null,
+): TDocumentDefinitions {
+  const finalAmount = getFinalOfferNet(quote);
 
   return {
     pageSize: "A4",
-    pageMargins: [42, 42, 42, 54],
+    pageMargins: [42, 38, 42, 56],
     defaultStyle: {
       font: "Roboto",
-      fontSize: 9,
+      fontSize: 9.5,
       color: brand.darkText,
       lineHeight: 1.25,
     },
     styles: {
-      title: {
-        fontSize: 30,
+      brandName: {
+        fontSize: 18,
         bold: true,
         color: brand.teal,
+      },
+      title: {
+        fontSize: 28,
+        bold: true,
+        color: brand.teal,
+      },
+      subtitle: {
+        fontSize: 12,
+        color: brand.gold,
+        bold: true,
       },
       sectionTitle: {
         fontSize: 13,
         bold: true,
         color: brand.teal,
-        margin: [0, 0, 0, 8],
       },
-      tableHeader: {
+      subsectionTitle: {
+        fontSize: 11,
         bold: true,
-        color: "#ffffff",
-        fontSize: 8,
+        color: brand.gold,
+        margin: [0, 0, 0, 5],
+      },
+      offerAmount: {
+        fontSize: 24,
+        bold: true,
+        color: brand.teal,
       },
     },
     background: getPageBackground(),
@@ -356,7 +497,7 @@ function getDocumentDefinition(quote: Quote, items: QuoteItem[], logoDataUrl: st
       columns: [
         { text: "sales@veateran.gr", color: brand.teal, bold: true },
         { text: "+30 6947 005 008", alignment: "center", color: brand.teal, bold: true },
-        { text: "@theveateran", alignment: "right", color: brand.teal, bold: true },
+        { text: "www.veateran.gr | @theveateran", alignment: "right", color: brand.teal, bold: true },
       ],
     },
     content: [
@@ -364,92 +505,141 @@ function getDocumentDefinition(quote: Quote, items: QuoteItem[], logoDataUrl: st
         columns: [
           logoDataUrl
             ? { image: logoDataUrl, width: 62, margin: [0, 0, 18, 0] }
-            : { text: "The VeatERAN Van", bold: true, color: brand.teal },
+            : { text: "The VeatERAN Van", style: "brandName" },
           {
             stack: [
-              { text: "Προσφορά", style: "title" },
-              { text: "The VeatERAN Van", color: brand.softGold, bold: true, characterSpacing: 1 },
+              { text: "The VeatERAN Van", style: "brandName" },
+              { text: "Προσφορά Εκδήλωσης", style: "title", margin: [0, 4, 0, 0] },
+              { text: getOfferSubtitle(quote), style: "subtitle", margin: [0, 4, 0, 0] },
             ],
           },
           {
-            stack: compactContent([
-              detailLine("Αριθμός προσφοράς", quote.quote_number),
-              detailLine("Ημερομηνία", formatDate(quote.created_at)),
-              detailLine("Ισχύει έως", formatDate(quote.valid_until)),
-              detailLine("Κατάσταση", quoteStatusLabels[quote.status]),
-            ]),
-            width: 180,
-            margin: [0, 2, 0, 0],
+            stack: [
+              { text: `Αριθμός: ${quote.quote_number}`, alignment: "right", color: brand.teal, bold: true },
+              { text: `Ημερομηνία: ${formatDate(quote.created_at)}`, alignment: "right", margin: [0, 5, 0, 0] },
+              quote.valid_until
+                ? { text: `Ισχύει έως: ${formatDate(quote.valid_until)}`, alignment: "right", margin: [0, 3, 0, 0] }
+                : { text: "" },
+            ],
+            width: 165,
           },
         ],
         columnGap: 12,
       },
-      getGoldDivider(),
+      getDivider([0, 20, 0, 16]),
       {
-        columns: [
-          {
-            stack: [{ text: "Πελάτης", style: "sectionTitle" }, ...getCustomerContent(quote)],
-            fillColor: "#ffffff",
-            margin: [0, 0, 10, 0],
-          },
-          {
-            stack: compactContent([
-              { text: "Εκδήλωση", style: "sectionTitle" },
-              detailLine("Τύπος", quote.event_type),
-              detailLine("Ημερομηνία", formatDate(quote.event_date)),
-              detailLine("Τοποθεσία", quote.event_location),
-              detailLine("Ενήλικες", guestBreakdown.adultGuestCount),
-              detailLine("Παιδιά", guestBreakdown.childGuestCount),
-              detailLine("Σύνολο", guestBreakdown.totalGuestCount),
-            ]),
-          },
-        ],
-        columnGap: 28,
+        text:
+          "Σας ευχαριστούμε που επικοινωνήσατε με το The VeatERAN Van για την εκδήλωσή σας. Παρακάτω θα βρείτε την πρότασή μας, διαμορφωμένη σύμφωνα με τα στοιχεία και τις επιλογές που μας αποστείλατε.",
+        color: brand.darkText,
+        margin: [0, 0, 0, 18],
       },
-      { text: "Προϊόντα & υπηρεσίες", style: "sectionTitle", margin: [0, 24, 0, 10] },
-      ...getItemsContent(quote, items),
       {
-        columns: [
-          { text: "" },
-          {
-            width: 210,
-            table: {
-              widths: ["*", "auto"],
-              body: [
-                ["Σύνολο προ ΦΠΑ", { text: formatCurrency(quote.subtotal_net), alignment: "right" }],
-                ["ΦΠΑ", { text: formatCurrency(quote.vat_amount), alignment: "right" }],
-                [
-                  { text: "Σύνολο με ΦΠΑ", bold: true, color: brand.teal },
-                  { text: formatCurrency(quote.total_gross), alignment: "right", bold: true, color: brand.teal },
+        text: "Στοιχεία Εκδήλωσης",
+        style: "sectionTitle",
+        margin: [0, 0, 0, 8],
+      },
+      getDetailsGrid(quote, context),
+      ...getOfferIncludesContent(items),
+      ...getDescriptionContent(quote),
+      ...getIncludedServicesContent(items),
+      {
+        table: {
+          widths: ["*"],
+          body: [
+            [
+              {
+                stack: [
+                  { text: "Συνολική προσφορά:", color: brand.gold, bold: true, alignment: "center" },
+                  {
+                    text: `${formatCurrency(finalAmount)} + ΦΠΑ`,
+                    style: "offerAmount",
+                    alignment: "center",
+                    margin: [0, 7, 0, 0],
+                  },
                 ],
-              ],
-            },
-            layout: {
-              hLineColor: () => brand.paleGold,
-              vLineColor: () => brand.paleGold,
-              paddingTop: () => 7,
-              paddingBottom: () => 7,
-              paddingLeft: () => 7,
-              paddingRight: () => 7,
-            },
-            margin: [0, 14, 0, 0],
-          },
-        ],
+                margin: [0, 14, 0, 14],
+              },
+            ],
+          ],
+        },
+        layout: {
+          hLineColor: () => brand.gold,
+          vLineColor: () => brand.gold,
+          paddingTop: () => 0,
+          paddingBottom: () => 0,
+          paddingLeft: () => 0,
+          paddingRight: () => 0,
+          fillColor: () => brand.paper,
+        },
+        margin: [42, 24, 42, 0],
       },
-      quote.public_notes
-        ? [
-            { text: "Δημόσιες σημειώσεις", style: "sectionTitle", margin: [0, 22, 0, 8] },
-            { text: quote.public_notes },
-          ]
-        : [],
       quote.terms
         ? [
-            { text: "Όροι προσφοράς", style: "sectionTitle", margin: [0, 18, 0, 8] },
-            { text: quote.terms, color: brand.termsText },
+            { text: "Όροι", style: "sectionTitle", margin: [0, 18, 0, 8] },
+            { text: quote.terms, color: brand.mutedText },
           ]
         : [],
+      getDivider([0, 20, 0, 14]),
+      {
+        text:
+          "Θα χαρούμε πολύ να συνεργαστούμε και να συμβάλουμε στην επιτυχία της εκδήλωσής σας. Για οποιαδήποτε διευκρίνιση ή προσαρμογή, είμαστε στη διάθεσή σας.",
+        alignment: "center",
+        color: brand.teal,
+        bold: true,
+      },
     ],
   };
+}
+
+function transliterateGreek(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .split("")
+    .map((character) => {
+      const lower = character.toLocaleLowerCase("el-GR");
+      const transliterated = greekToLatin[lower] ?? character;
+      return character === lower ? transliterated : capitalize(transliterated);
+    })
+    .join("");
+}
+
+function capitalize(value: string) {
+  return value ? `${value[0].toUpperCase()}${value.slice(1)}` : value;
+}
+
+function toFilenameSlug(value: string) {
+  const transliterated = transliterateGreek(value)
+    .replace(/[^A-Za-z0-9]+/g, " ")
+    .trim();
+
+  if (!transliterated) {
+    return "Offer";
+  }
+
+  return transliterated
+    .split(/\s+/)
+    .map((part) => capitalize(part.toLowerCase()))
+    .join("");
+}
+
+function getDateStamp(value?: string | null) {
+  const date = value ? new Date(value) : new Date();
+
+  if (Number.isNaN(date.getTime())) {
+    return getDateStamp(null);
+  }
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}${month}${day}`;
+}
+
+function getPdfFilename(quote: Quote) {
+  const source = quote.event_location || quote.business_name || quote.customer_name || quote.quote_number;
+  return `Veateran_Offer_${toFilenameSlug(source)}_${getDateStamp(quote.event_date)}.pdf`;
 }
 
 export async function GET(request: Request, context: RouteContext<"/admin/quotes/[id]/pdf">) {
@@ -480,15 +670,24 @@ export async function GET(request: Request, context: RouteContext<"/admin/quotes
     return new Response("Could not load quote items", { status: 500 });
   }
 
+  const { data: requestData } = await supabase
+    .from("quote_requests")
+    .select("interested_in")
+    .eq("id", quote.request_id)
+    .maybeSingle();
+
+  const contextData: QuoteRequestPdfContext | null = requestData
+    ? { interested_in: typeof requestData.interested_in === "string" ? requestData.interested_in : null }
+    : null;
   const items = (itemData ?? []).map((item) => normalizeQuoteItem(item as Record<string, unknown>));
   const shouldDownload = new URL(request.url).searchParams.get("download") === "1";
-  const filename = `veateran-offer-${quote.quote_number}.pdf`;
+  const filename = getPdfFilename(quote);
 
   try {
     configureFonts();
 
     const logoDataUrl = await getLogoDataUrl();
-    const documentDefinition = getDocumentDefinition(quote, items, logoDataUrl);
+    const documentDefinition = getDocumentDefinition(quote, items, contextData, logoDataUrl);
     assertCanvasValuesAreArrays(documentDefinition);
 
     const pdf = pdfMake.createPdf(documentDefinition);

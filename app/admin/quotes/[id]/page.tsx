@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { QuoteEditor } from "@/app/admin/quotes/[id]/QuoteEditor";
 import { AdminShell } from "@/components/AdminShell";
 import { requireAdminSession } from "@/lib/adminAuth";
+import type { QuoteProduct } from "@/lib/crm/products";
 import { quoteStatusLabels, quoteStatusToneClasses, type Quote, type QuoteItem } from "@/lib/crm/quotes";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
@@ -106,6 +107,29 @@ function normalizeQuoteItem(value: Record<string, unknown>): QuoteItem {
   };
 }
 
+function normalizeProduct(value: Record<string, unknown>): QuoteProduct {
+  return {
+    id: String(value.id),
+    created_at: String(value.created_at),
+    updated_at: String(value.updated_at),
+    name: String(value.name),
+    category: String(value.category) as QuoteProduct["category"],
+    product_key: typeof value.product_key === "string" ? value.product_key : null,
+    audience:
+      value.audience === "adult" || value.audience === "child" || value.audience === "both" || value.audience === "service"
+        ? value.audience
+        : value.category === "service"
+          ? "service"
+          : "both",
+    unit: String(value.unit) as QuoteProduct["unit"],
+    price_net: Number(value.price_net) || 0,
+    vat_rate: Number(value.vat_rate) || 0,
+    is_active: value.is_active === true,
+    sort_order: Number(value.sort_order) || 0,
+    notes: typeof value.notes === "string" ? value.notes : null,
+  };
+}
+
 export default async function QuotePage({ params, searchParams }: QuotePageProps) {
   await requireAdminSession();
 
@@ -130,6 +154,13 @@ export default async function QuotePage({ params, searchParams }: QuotePageProps
     .order("sort_order", { ascending: true })
     .order("created_at", { ascending: true });
   const items = (itemData ?? []).map((item) => normalizeQuoteItem(item as Record<string, unknown>));
+  const { data: productData, error: productError } = await supabase
+    .from("quote_products")
+    .select("*")
+    .eq("is_active", true)
+    .order("sort_order", { ascending: true })
+    .order("name", { ascending: true });
+  const products = (productData ?? []).map((product) => normalizeProduct(product as Record<string, unknown>));
 
   return (
     <AdminShell>
@@ -153,7 +184,7 @@ export default async function QuotePage({ params, searchParams }: QuotePageProps
           Οι αλλαγές αποθηκεύτηκαν.
         </p>
       ) : null}
-      {messages.error === "1" || itemError ? (
+      {messages.error === "1" || itemError || productError ? (
         <p className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-800">
           Δεν ήταν δυνατή η αποθήκευση ή φόρτωση της προσφοράς.
         </p>
@@ -164,7 +195,7 @@ export default async function QuotePage({ params, searchParams }: QuotePageProps
         </p>
       ) : null}
 
-      <QuoteEditor items={items} quote={quote} />
+      <QuoteEditor items={items} products={products} quote={quote} />
     </AdminShell>
   );
 }

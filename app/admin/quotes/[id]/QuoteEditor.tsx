@@ -28,6 +28,7 @@ import {
   quoteProductCategoryLabels,
   quoteProductUnits,
   quoteProductUnitLabels,
+  type QuoteProduct,
 } from "@/lib/crm/products";
 
 type EditableQuoteItem = {
@@ -95,6 +96,58 @@ function getNewExtraExpenseRow(sortOrder: number): EditableQuoteItem {
     vat_rate: "24",
     line_type: "extra",
     is_extra_expense: true,
+    sort_order: String(sortOrder),
+    notes: "",
+  };
+}
+
+function getAudienceFromProduct(product: QuoteProduct): QuoteItemAudience | null {
+  if (product.audience === "adult" || product.audience === "child" || product.audience === "service") {
+    return product.audience;
+  }
+
+  return product.category === "service" ? "service" : "adult";
+}
+
+function getLineTypeFromProduct(product: QuoteProduct): QuoteItemLineType {
+  return product.category === "service" || product.audience === "service" ? "service" : "menu";
+}
+
+function getNewProductRow(product: QuoteProduct, sortOrder: number): EditableQuoteItem {
+  const lineType = getLineTypeFromProduct(product);
+
+  return {
+    key: `new-product-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    id: null,
+    product_id: product.id,
+    product_name: product.name,
+    category: product.category,
+    audience: getAudienceFromProduct(product),
+    unit: product.unit,
+    quantity: "1",
+    unit_price_net: String(product.price_net),
+    vat_rate: String(product.vat_rate),
+    line_type: lineType,
+    is_extra_expense: lineType === "extra",
+    sort_order: String(sortOrder),
+    notes: product.notes ?? "",
+  };
+}
+
+function getNewCustomRow(sortOrder: number): EditableQuoteItem {
+  return {
+    key: `new-custom-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    id: null,
+    product_id: null,
+    product_name: "",
+    category: "food",
+    audience: "adult",
+    unit: "per_person",
+    quantity: "1",
+    unit_price_net: "0",
+    vat_rate: "24",
+    line_type: "menu",
+    is_extra_expense: false,
     sort_order: String(sortOrder),
     notes: "",
   };
@@ -196,7 +249,6 @@ function HiddenRowFields({ row }: { row: EditableQuoteItem }) {
       <input name="row_key" type="hidden" value={row.key} />
       <input name={`item_id_${row.key}`} type="hidden" value={row.id ?? ""} />
       <input name={`product_id_${row.key}`} type="hidden" value={row.product_id ?? ""} />
-      <input name={`line_type_${row.key}`} type="hidden" value={row.line_type} />
       <input name={`is_extra_expense_${row.key}`} type="hidden" value={row.is_extra_expense ? "1" : "0"} />
     </>
   );
@@ -222,6 +274,7 @@ function QuoteLineCard({
     return (
       <div className="rounded-2xl border border-[#d9b76f]/25 bg-[#fffaf0]/70 p-4">
         <HiddenRowFields row={row} />
+        <input name={`line_type_${row.key}`} type="hidden" value="extra" />
         <input name={`category_${row.key}`} type="hidden" value={row.category} />
         <input name={`audience_${row.key}`} type="hidden" value="service" />
         <input name={`unit_${row.key}`} type="hidden" value="fixed" />
@@ -297,11 +350,12 @@ function QuoteLineCard({
       <HiddenRowFields row={row} />
 
       {title ? <h4 className="mb-4 text-sm font-bold text-[#0A5458]">{title}</h4> : null}
+      {compact ? <input name={`line_type_${row.key}`} type="hidden" value={row.line_type} /> : null}
       <div
         className={
           compact
             ? "grid gap-4 lg:grid-cols-[1.1fr_0.45fr_0.32fr_0.32fr_auto] lg:items-end"
-            : "grid gap-4 lg:grid-cols-[1.3fr_0.72fr_0.75fr_0.72fr_0.48fr_0.62fr_0.38fr_0.42fr]"
+            : "grid gap-4 lg:grid-cols-[1.25fr_0.68fr_0.7fr_0.7fr_0.62fr_0.48fr_0.6fr_0.38fr_0.4fr]"
         }
       >
         <label className={labelClass}>
@@ -384,6 +438,31 @@ function QuoteLineCard({
             </select>
           </label>
         )}
+
+        {!compact ? (
+          <label className={labelClass}>
+            Τύπος γραμμής
+            <select
+              className={`${inputClass} mt-2`}
+              name={`line_type_${row.key}`}
+              onChange={(event) => {
+                const lineType = event.target.value as QuoteItemLineType;
+                updateRow(row.key, {
+                  line_type: lineType,
+                  is_extra_expense: lineType === "extra",
+                  category: lineType === "extra" ? "other" : row.category,
+                  audience: lineType === "extra" || lineType === "service" ? "service" : row.audience,
+                  unit: lineType === "extra" ? "fixed" : row.unit,
+                });
+              }}
+              value={row.line_type}
+            >
+              <option value="menu">Μενού</option>
+              <option value="service">Πρόσθετο κόστος</option>
+              <option value="extra">Έκτακτο έξοδο</option>
+            </select>
+          </label>
+        ) : null}
 
         <label className={labelClass}>
           Ποσότητα
@@ -483,10 +562,11 @@ function QuoteLineCard({
   );
 }
 
-export function QuoteEditor({ quote, items }: { quote: Quote; items: QuoteItem[] }) {
+export function QuoteEditor({ quote, items, products }: { quote: Quote; items: QuoteItem[]; products: QuoteProduct[] }) {
   const [rows, setRows] = useState<EditableQuoteItem[]>(items.map(getRowFromItem));
   const [marginPercent, setMarginPercent] = useState(String(quote.margin_percent ?? 30));
   const [offerVatRate, setOfferVatRate] = useState(String(quote.offer_vat_rate ?? 24));
+  const [selectedProductId, setSelectedProductId] = useState("");
   const [recalculated, setRecalculated] = useState(false);
   const guestBreakdown = getQuoteGuestBreakdown(quote);
   const marginPercentNumber = getNumber(marginPercent);
@@ -521,6 +601,27 @@ export function QuoteEditor({ quote, items }: { quote: Quote; items: QuoteItem[]
     const nextSortOrder =
       rows.reduce((max, row) => Math.max(max, Number.parseInt(row.sort_order, 10) || 0), 0) + 10;
     setRows((currentRows) => [...currentRows, getNewExtraExpenseRow(nextSortOrder)]);
+    setRecalculated(false);
+  }
+
+  function getNextSortOrder() {
+    return rows.reduce((max, row) => Math.max(max, Number.parseInt(row.sort_order, 10) || 0), 0) + 10;
+  }
+
+  function addSelectedProduct() {
+    const product = products.find((candidate) => candidate.id === selectedProductId);
+
+    if (!product) {
+      return;
+    }
+
+    setRows((currentRows) => [...currentRows, getNewProductRow(product, getNextSortOrder())]);
+    setSelectedProductId("");
+    setRecalculated(false);
+  }
+
+  function addCustomItem() {
+    setRows((currentRows) => [...currentRows, getNewCustomRow(getNextSortOrder())]);
     setRecalculated(false);
   }
 
@@ -607,6 +708,40 @@ export function QuoteEditor({ quote, items }: { quote: Quote; items: QuoteItem[]
       </section>
 
       <section className="rounded-2xl border border-[#d9b76f]/25 bg-white/85 p-5 shadow-lg shadow-[#0A5458]/5">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+          <div>
+            <h2 className="text-xl font-semibold text-[#0A5458]">Προσθήκη είδους</h2>
+            <p className="mt-2 text-sm leading-6 text-[#5f594f]">
+              Προσθέστε είδος από τον κατάλογο ή δημιουργήστε προσαρμοσμένη γραμμή κόστους.
+            </p>
+          </div>
+          <div className="grid flex-1 gap-3 md:grid-cols-[1fr_auto_auto] md:items-end">
+            <label className={labelClass}>
+              Είδος καταλόγου
+              <select
+                className={`${inputClass} mt-2`}
+                onChange={(event) => setSelectedProductId(event.target.value)}
+                value={selectedProductId}
+              >
+                <option value="">Επιλέξτε προϊόν</option>
+                {products.map((product) => (
+                  <option key={product.id} value={product.id}>
+                    {product.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button className={buttonOutlineClass} disabled={!selectedProductId} onClick={addSelectedProduct} type="button">
+              Προσθήκη είδους
+            </button>
+            <button className={buttonOutlineClass} onClick={addCustomItem} type="button">
+              Προσαρμοσμένο είδος
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-[#d9b76f]/25 bg-white/85 p-5 shadow-lg shadow-[#0A5458]/5">
         <h2 className="text-xl font-semibold text-[#0A5458]">Κόστος μενού</h2>
         <div className="mt-5 space-y-5">
           {renderMenuGroup("Μενού ενηλίκων", adultMenuRows)}
@@ -625,7 +760,7 @@ export function QuoteEditor({ quote, items }: { quote: Quote; items: QuoteItem[]
           ) : (
             serviceRows.map((row) => (
               <QuoteLineCard
-                compact
+                compact={row.product_id !== null}
                 key={row.key}
                 removeRow={removeRow}
                 row={row}

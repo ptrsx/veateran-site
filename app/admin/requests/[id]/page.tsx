@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { updateQuoteRequest } from "@/app/admin/requests/[id]/actions";
+import { deleteQuoteRequest, updateQuoteRequest } from "@/app/admin/requests/[id]/actions";
+import { DeleteRequestButton } from "@/app/admin/requests/[id]/DeleteRequestButton";
 import { generateQuoteForRequest } from "@/app/admin/requests/[id]/quote-actions";
 import { AdminShell } from "@/components/AdminShell";
 import { requireAdminSession } from "@/lib/adminAuth";
@@ -141,6 +142,7 @@ export default async function RequestDetailPage({ params, searchParams }: Reques
 
   const request = data as QuoteRequest;
   const saveAction = updateQuoteRequest.bind(null, request.id);
+  const deleteAction = deleteQuoteRequest.bind(null, request.id);
   const customerType = request.customer_type === "business" ? "business" : "individual";
   const contactName = request.contact_name || request.name;
   const contactPhone = request.contact_phone || request.phone;
@@ -186,6 +188,7 @@ export default async function RequestDetailPage({ params, searchParams }: Reques
             <span className="text-sm text-[#5f594f]">{formatDateTime(request.created_at)}</span>
           </div>
         </div>
+        <DeleteRequestButton action={deleteAction} />
       </div>
 
       {messages.saved === "1" ? (
@@ -206,6 +209,11 @@ export default async function RequestDetailPage({ params, searchParams }: Reques
       {messages.quoteError === "1" || quotesError ? (
         <p className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-800">
           Δεν ήταν δυνατή η δημιουργία ή φόρτωση προσφοράς.
+        </p>
+      ) : null}
+      {request.deleted_at ? (
+        <p className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-800">
+          Αυτό το αίτημα έχει διαγραφεί από τις ενεργές λίστες.
         </p>
       ) : null}
 

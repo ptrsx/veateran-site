@@ -136,3 +136,47 @@ export async function updateQuoteProduct(formData: FormData) {
   revalidatePath("/admin/products");
   redirect("/admin/products?saved=1");
 }
+
+export async function deleteQuoteProduct(formData: FormData) {
+  await requireAdminSession();
+
+  const id = getString(formData, "id");
+
+  if (!id) {
+    redirect("/admin/products?error=1");
+  }
+
+  const supabase = createSupabaseAdminClient();
+  const { data: usageData, error: usageError } = await supabase
+    .from("quote_items")
+    .select("id")
+    .eq("product_id", id)
+    .limit(1);
+
+  if (usageError) {
+    console.error("Failed to check quote product usage.", usageError);
+    redirect("/admin/products?error=1");
+  }
+
+  if ((usageData ?? []).length > 0) {
+    const { error } = await supabase.from("quote_products").update({ is_active: false }).eq("id", id);
+
+    if (error) {
+      console.error("Failed to deactivate used quote product.", error);
+      redirect("/admin/products?error=1");
+    }
+
+    revalidatePath("/admin/products");
+    redirect("/admin/products?deactivated=1");
+  }
+
+  const { error } = await supabase.from("quote_products").delete().eq("id", id);
+
+  if (error) {
+    console.error("Failed to delete quote product.", error);
+    redirect("/admin/products?error=1");
+  }
+
+  revalidatePath("/admin/products");
+  redirect("/admin/products?deleted=1");
+}
