@@ -14,6 +14,7 @@ type QuotePageProps = {
   searchParams: Promise<{
     saved?: string;
     error?: string;
+    marginError?: string;
   }>;
 };
 
@@ -50,6 +51,21 @@ function normalizeQuote(value: Record<string, unknown>): Quote {
         ? null
         : Number(value.child_guest_count),
     guest_count: value.guest_count === null || value.guest_count === undefined ? null : Number(value.guest_count),
+    food_drinks_cost_net: Number(value.food_drinks_cost_net) || 0,
+    van_rental_cost_net: Number(value.van_rental_cost_net) || 0,
+    transport_cost_net: Number(value.transport_cost_net) || 0,
+    staff_cost_net: Number(value.staff_cost_net) || 0,
+    consumables_cost_net: Number(value.consumables_cost_net) || 0,
+    extra_costs_net: Number(value.extra_costs_net) || 0,
+    total_cost_net: Number(value.total_cost_net) || 0,
+    margin_percent:
+      value.margin_percent === null || value.margin_percent === undefined ? 30 : Number(value.margin_percent),
+    offer_net: Number(value.offer_net) || Number(value.subtotal_net) || 0,
+    profit_net: Number(value.profit_net) || 0,
+    offer_vat_rate:
+      value.offer_vat_rate === null || value.offer_vat_rate === undefined ? 24 : Number(value.offer_vat_rate),
+    offer_vat_amount: Number(value.offer_vat_amount) || Number(value.vat_amount) || 0,
+    offer_gross: Number(value.offer_gross) || Number(value.total_gross) || 0,
     subtotal_net: Number(value.subtotal_net) || 0,
     vat_amount: Number(value.vat_amount) || 0,
     total_gross: Number(value.total_gross) || 0,
@@ -78,6 +94,13 @@ function normalizeQuoteItem(value: Record<string, unknown>): QuoteItem {
     unit_price_net: Number(value.unit_price_net) || 0,
     vat_rate: Number(value.vat_rate) || 0,
     line_total_net: Number(value.line_total_net) || 0,
+    line_type:
+      value.line_type === "menu" || value.line_type === "service" || value.line_type === "extra"
+        ? value.line_type
+        : value.audience === "service" || value.category === "service"
+          ? "service"
+          : "menu",
+    is_extra_expense: value.is_extra_expense === true,
     sort_order: Number(value.sort_order) || 0,
     notes: typeof value.notes === "string" ? value.notes : null,
   };
@@ -133,6 +156,11 @@ export default async function QuotePage({ params, searchParams }: QuotePageProps
       {messages.error === "1" || itemError ? (
         <p className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-800">
           Δεν ήταν δυνατή η αποθήκευση ή φόρτωση της προσφοράς.
+        </p>
+      ) : null}
+      {messages.marginError === "1" ? (
+        <p className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-800">
+          Το Margin πρέπει να είναι από 0 έως και μικρότερο από 100.
         </p>
       ) : null}
 

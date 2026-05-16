@@ -16,7 +16,9 @@ import type { QuoteProduct, QuoteProductCategory, QuoteProductUnit } from "@/lib
 import type { QuoteRequest } from "@/lib/crm/types";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
-const serviceProductKeys = ["van-rental-cost", "transport-cost", "staff-cost"];
+const defaultMarginPercent = 30;
+const defaultOfferVatRate = 24;
+const serviceProductKeys = ["van-rental-cost", "transport-cost", "staff-cost", "consumables-cost"];
 
 function normalizeText(value: string) {
   return value.trim().toLocaleLowerCase("el-GR");
@@ -91,7 +93,7 @@ function getMenuQuoteItems(
     const vatRate = product?.vat_rate ?? 24;
     const notes =
       !product || unitPriceNet === 0
-        ? "Χρειάζεται έλεγχος τιμής πριν την αποστολή."
+        ? "Χρειάζεται έλεγχος κόστους πριν την αποστολή."
         : null;
 
     return {
@@ -103,6 +105,8 @@ function getMenuQuoteItems(
       quantity: guestCount,
       unit_price_net: unitPriceNet,
       vat_rate: vatRate,
+      line_type: "menu",
+      is_extra_expense: false,
       sort_order: sortOrderOffset + index + 1,
       notes,
     };
@@ -129,10 +133,12 @@ function getServiceQuoteItems(products: QuoteProduct[]) {
         quantity: 1,
         unit_price_net: product.price_net,
         vat_rate: product.vat_rate,
+        line_type: "service",
+        is_extra_expense: false,
         sort_order: 300 + index + 1,
         notes:
           product.price_net === 0
-            ? "Χρειάζεται έλεγχος τιμής πριν την αποστολή."
+            ? "Χρειάζεται έλεγχος κόστους πριν την αποστολή."
             : null,
       } satisfies QuoteItemInput;
     })
@@ -239,7 +245,10 @@ export async function generateQuoteForRequest(requestId: string) {
     sort_order: Number(product.sort_order) || 0,
   })) as QuoteProduct[];
   const quoteItems = getQuoteItemsFromRequest(request, products);
-  const quoteTotals = calculateQuoteTotals(quoteItems);
+  const quoteTotals = calculateQuoteTotals(quoteItems, {
+    margin_percent: defaultMarginPercent,
+    offer_vat_rate: defaultOfferVatRate,
+  });
   const guestBreakdown = getGuestBreakdown(request);
   const year = new Date().getFullYear();
 
@@ -274,6 +283,19 @@ export async function generateQuoteForRequest(requestId: string) {
         adult_guest_count: guestBreakdown.adultGuestCount,
         child_guest_count: guestBreakdown.childGuestCount,
         guest_count: guestBreakdown.totalGuestCount,
+        food_drinks_cost_net: quoteTotals.food_drinks_cost_net,
+        van_rental_cost_net: quoteTotals.van_rental_cost_net,
+        transport_cost_net: quoteTotals.transport_cost_net,
+        staff_cost_net: quoteTotals.staff_cost_net,
+        consumables_cost_net: quoteTotals.consumables_cost_net,
+        extra_costs_net: quoteTotals.extra_costs_net,
+        total_cost_net: quoteTotals.total_cost_net,
+        margin_percent: quoteTotals.margin_percent,
+        offer_net: quoteTotals.offer_net,
+        profit_net: quoteTotals.profit_net,
+        offer_vat_rate: quoteTotals.offer_vat_rate,
+        offer_vat_amount: quoteTotals.offer_vat_amount,
+        offer_gross: quoteTotals.offer_gross,
         subtotal_net: quoteTotals.subtotal_net,
         vat_amount: quoteTotals.vat_amount,
         total_gross: quoteTotals.total_gross,
@@ -311,6 +333,8 @@ export async function generateQuoteForRequest(requestId: string) {
         unit_price_net: item.unit_price_net,
         vat_rate: item.vat_rate,
         line_total_net: calculateQuoteItemLineTotal(item),
+        line_type: item.line_type ?? "menu",
+        is_extra_expense: item.is_extra_expense ?? false,
         sort_order: item.sort_order,
         notes: item.notes ?? null,
       })),

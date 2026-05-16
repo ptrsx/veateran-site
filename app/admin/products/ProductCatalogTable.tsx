@@ -66,7 +66,7 @@ function ProductFields({ product }: { product?: QuoteProduct }) {
       </label>
 
       <label className={labelClass}>
-        Τιμή προ ΦΠΑ
+        Κόστος προ ΦΠΑ
         <input
           className={inputClass}
           defaultValue={product?.price_net ?? 0}
@@ -174,7 +174,7 @@ export function ProductCatalogTable({ products }: { products: QuoteProduct[] }) 
                 <th className="px-4 py-3">Κατηγορία</th>
                 <th className="px-4 py-3">Κοινό</th>
                 <th className="px-4 py-3">Μονάδα χρέωσης</th>
-                <th className="px-4 py-3">Τιμή προ ΦΠΑ</th>
+                <th className="px-4 py-3">Κόστος προ ΦΠΑ</th>
                 <th className="px-4 py-3">ΦΠΑ %</th>
                 <th className="px-4 py-3">Ενεργό</th>
                 <th className="px-4 py-3">Σειρά</th>

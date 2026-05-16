@@ -8,12 +8,20 @@ import { formatCurrency, formatDate, formatNumber } from "@/lib/crm/formatters";
 import {
   calculateQuoteItemLineTotal,
   calculateQuoteTotals,
+  getQuoteItemLineType,
+  isConsumablesCost,
+  isStaffCost,
+  isTransportCost,
+  isVanRentalCost,
   quoteItemGroupLabels,
   quoteStatuses,
   quoteStatusLabels,
+  validateMarginPercent,
   type Quote,
   type QuoteItem,
   type QuoteItemAudience,
+  type QuoteItemLineType,
+  type QuoteTotals,
 } from "@/lib/crm/quotes";
 import {
   quoteProductCategories,
@@ -33,6 +41,8 @@ type EditableQuoteItem = {
   quantity: string;
   unit_price_net: string;
   vat_rate: string;
+  line_type: QuoteItemLineType;
+  is_extra_expense: boolean;
   sort_order: string;
   notes: string;
 };
@@ -40,6 +50,8 @@ type EditableQuoteItem = {
 const inputClass =
   "w-full rounded-xl border border-[#d9b76f]/30 bg-white px-3 py-2 text-sm outline-none focus:border-[#0A5458]";
 const labelClass = "text-sm font-semibold text-[#0A5458]";
+const buttonOutlineClass =
+  "rounded-full border border-[#d9b76f]/40 px-5 py-2.5 text-sm font-bold text-[#0A5458] transition hover:bg-[#0A5458]/10";
 
 function getRowFromItem(item: QuoteItem): EditableQuoteItem {
   return {
@@ -53,28 +65,36 @@ function getRowFromItem(item: QuoteItem): EditableQuoteItem {
     quantity: String(item.quantity),
     unit_price_net: String(item.unit_price_net),
     vat_rate: String(item.vat_rate),
+    line_type: getQuoteItemLineType(item),
+    is_extra_expense: item.is_extra_expense || item.line_type === "extra",
     sort_order: String(item.sort_order),
     notes: item.notes ?? "",
   };
 }
 
+function parseNumber(value: string) {
+  return Number.parseFloat(value.replace(",", "."));
+}
+
 function getNumber(value: string) {
-  const parsed = Number.parseFloat(value.replace(",", "."));
+  const parsed = parseNumber(value);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
 }
 
-function getNewRow(sortOrder: number): EditableQuoteItem {
+function getNewExtraExpenseRow(sortOrder: number): EditableQuoteItem {
   return {
-    key: `new-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    key: `new-extra-${Date.now()}-${Math.random().toString(16).slice(2)}`,
     id: null,
     product_id: null,
     product_name: "",
     category: "other",
-    audience: null,
+    audience: "service",
     unit: "fixed",
     quantity: "1",
     unit_price_net: "0",
     vat_rate: "24",
+    line_type: "extra",
+    is_extra_expense: true,
     sort_order: String(sortOrder),
     notes: "",
   };
@@ -94,12 +114,64 @@ function getQuoteGuestBreakdown(quote: Quote) {
   };
 }
 
-function getRowGroup(row: EditableQuoteItem) {
-  if (row.audience === "adult" || row.audience === "child" || row.audience === "service") {
-    return row.audience;
+function getServiceDisplayName(row: EditableQuoteItem) {
+  if (isVanRentalCost(row)) {
+    return "Ενοικίαση van";
   }
 
-  return row.category === "service" ? "service" : "other";
+  if (isTransportCost(row)) {
+    return "Έξοδα μεταφοράς";
+  }
+
+  if (isStaffCost(row)) {
+    return "Προσωπικό";
+  }
+
+  if (isConsumablesCost(row)) {
+    return "Αναλώσιμα";
+  }
+
+  return row.product_name || "Πρόσθετο κόστος";
+}
+
+function getLineTotal(row: EditableQuoteItem) {
+  return calculateQuoteItemLineTotal({
+    quantity: getNumber(row.quantity),
+    unit_price_net: getNumber(row.unit_price_net),
+  });
+}
+
+function getCalculationRows(rows: EditableQuoteItem[]) {
+  return rows.map((row) => ({
+    product_name: row.product_name,
+    category: row.category,
+    audience: row.audience,
+    quantity: getNumber(row.quantity),
+    unit_price_net: getNumber(row.unit_price_net),
+    line_type: row.line_type,
+    is_extra_expense: row.is_extra_expense,
+  }));
+}
+
+function getFallbackTotals(quote: Quote): QuoteTotals {
+  return {
+    food_drinks_cost_net: quote.food_drinks_cost_net,
+    van_rental_cost_net: quote.van_rental_cost_net,
+    transport_cost_net: quote.transport_cost_net,
+    staff_cost_net: quote.staff_cost_net,
+    consumables_cost_net: quote.consumables_cost_net,
+    extra_costs_net: quote.extra_costs_net,
+    total_cost_net: quote.total_cost_net,
+    margin_percent: quote.margin_percent,
+    offer_net: quote.offer_net || quote.subtotal_net,
+    profit_net: quote.profit_net,
+    offer_vat_rate: quote.offer_vat_rate,
+    offer_vat_amount: quote.offer_vat_amount || quote.vat_amount,
+    offer_gross: quote.offer_gross || quote.total_gross,
+    subtotal_net: quote.subtotal_net,
+    vat_amount: quote.vat_amount,
+    total_gross: quote.total_gross,
+  };
 }
 
 const quoteItemAudienceOptions: Array<{ label: string; value: QuoteItemAudience | "" }> = [
@@ -109,32 +181,334 @@ const quoteItemAudienceOptions: Array<{ label: string; value: QuoteItemAudience 
   { label: quoteItemGroupLabels.other, value: "" },
 ];
 
+function SummaryLine({ label, value, strong = false }: { label: string; value: React.ReactNode; strong?: boolean }) {
+  return (
+    <div className={`flex items-center justify-between gap-4 ${strong ? "text-base font-bold" : ""}`}>
+      <span>{label}</span>
+      <span className="font-semibold">{value}</span>
+    </div>
+  );
+}
+
+function HiddenRowFields({ row }: { row: EditableQuoteItem }) {
+  return (
+    <>
+      <input name="row_key" type="hidden" value={row.key} />
+      <input name={`item_id_${row.key}`} type="hidden" value={row.id ?? ""} />
+      <input name={`product_id_${row.key}`} type="hidden" value={row.product_id ?? ""} />
+      <input name={`line_type_${row.key}`} type="hidden" value={row.line_type} />
+      <input name={`is_extra_expense_${row.key}`} type="hidden" value={row.is_extra_expense ? "1" : "0"} />
+    </>
+  );
+}
+
+function QuoteLineCard({
+  row,
+  title,
+  compact = false,
+  updateRow,
+  removeRow,
+}: {
+  row: EditableQuoteItem;
+  title?: string;
+  compact?: boolean;
+  updateRow: (rowKey: string, updates: Partial<EditableQuoteItem>) => void;
+  removeRow: (rowKey: string) => void;
+}) {
+  const lineTotal = getLineTotal(row);
+  const needsReview = getNumber(row.unit_price_net) === 0 || row.notes.includes("Χρειάζεται");
+
+  if (row.line_type === "extra") {
+    return (
+      <div className="rounded-2xl border border-[#d9b76f]/25 bg-[#fffaf0]/70 p-4">
+        <HiddenRowFields row={row} />
+        <input name={`category_${row.key}`} type="hidden" value={row.category} />
+        <input name={`audience_${row.key}`} type="hidden" value="service" />
+        <input name={`unit_${row.key}`} type="hidden" value="fixed" />
+        <input name={`quantity_${row.key}`} type="hidden" value="1" />
+        <input name={`sort_order_${row.key}`} type="hidden" value={row.sort_order} />
+
+        <div className="grid gap-4 lg:grid-cols-[1.2fr_0.45fr_0.36fr_auto] lg:items-end">
+          <label className={labelClass}>
+            Περιγραφή
+            <input
+              className={`${inputClass} mt-2`}
+              name={`product_name_${row.key}`}
+              onChange={(event) => updateRow(row.key, { product_name: event.target.value })}
+              required
+              type="text"
+              value={row.product_name}
+            />
+          </label>
+          <label className={labelClass}>
+            Κόστος προ ΦΠΑ
+            <input
+              className={`${inputClass} mt-2`}
+              min="0"
+              name={`unit_price_net_${row.key}`}
+              onChange={(event) => updateRow(row.key, { unit_price_net: event.target.value })}
+              step="0.01"
+              type="number"
+              value={row.unit_price_net}
+            />
+          </label>
+          <label className={labelClass}>
+            ΦΠΑ %
+            <input
+              className={`${inputClass} mt-2`}
+              min="0"
+              name={`vat_rate_${row.key}`}
+              onChange={(event) => updateRow(row.key, { vat_rate: event.target.value })}
+              step="0.01"
+              type="number"
+              value={row.vat_rate}
+            />
+          </label>
+          <button
+            className="rounded-full border border-red-200 px-4 py-2 text-sm font-bold text-red-700 transition hover:bg-red-50"
+            onClick={() => removeRow(row.key)}
+            type="button"
+          >
+            Αφαίρεση
+          </button>
+        </div>
+
+        <div className="mt-4 grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
+          <label className={labelClass}>
+            Σημειώσεις
+            <textarea
+              className={`${inputClass} mt-2 min-h-20`}
+              name={`notes_${row.key}`}
+              onChange={(event) => updateRow(row.key, { notes: event.target.value })}
+              value={row.notes}
+            />
+          </label>
+          <div className="rounded-xl border border-[#d9b76f]/20 bg-white/75 p-3 text-sm">
+            <p className="text-xs font-bold uppercase tracking-wide text-[#0A5458]">Σύνολο εξόδου</p>
+            <p className="mt-1 font-semibold text-[#2f2b25]">{formatCurrency(lineTotal)}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-2xl border border-[#d9b76f]/25 bg-[#fffaf0]/70 p-4">
+      <HiddenRowFields row={row} />
+
+      {title ? <h4 className="mb-4 text-sm font-bold text-[#0A5458]">{title}</h4> : null}
+      <div
+        className={
+          compact
+            ? "grid gap-4 lg:grid-cols-[1.1fr_0.45fr_0.32fr_0.32fr_auto] lg:items-end"
+            : "grid gap-4 lg:grid-cols-[1.3fr_0.72fr_0.75fr_0.72fr_0.48fr_0.62fr_0.38fr_0.42fr]"
+        }
+      >
+        <label className={labelClass}>
+          Προϊόν
+          <input
+            className={`${inputClass} mt-2`}
+            name={`product_name_${row.key}`}
+            onChange={(event) => updateRow(row.key, { product_name: event.target.value })}
+            required
+            type="text"
+            value={row.product_name}
+          />
+        </label>
+
+        {compact ? (
+          <input name={`audience_${row.key}`} type="hidden" value={row.audience ?? "service"} />
+        ) : (
+          <label className={labelClass}>
+            Ομάδα
+            <select
+              className={`${inputClass} mt-2`}
+              name={`audience_${row.key}`}
+              onChange={(event) =>
+                updateRow(row.key, {
+                  audience:
+                    event.target.value === ""
+                      ? null
+                      : (event.target.value as QuoteItemAudience),
+                })
+              }
+              value={row.audience ?? ""}
+            >
+              {quoteItemAudienceOptions.map((option) => (
+                <option key={option.value || "other"} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+
+        {compact ? (
+          <input name={`category_${row.key}`} type="hidden" value={row.category} />
+        ) : (
+          <label className={labelClass}>
+            Κατηγορία
+            <select
+              className={`${inputClass} mt-2`}
+              name={`category_${row.key}`}
+              onChange={(event) => updateRow(row.key, { category: event.target.value as QuoteItem["category"] })}
+              required
+              value={row.category}
+            >
+              {quoteProductCategories.map((category) => (
+                <option key={category} value={category}>
+                  {quoteProductCategoryLabels[category]}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+
+        {compact ? (
+          <input name={`unit_${row.key}`} type="hidden" value={row.unit} />
+        ) : (
+          <label className={labelClass}>
+            Μονάδα
+            <select
+              className={`${inputClass} mt-2`}
+              name={`unit_${row.key}`}
+              onChange={(event) => updateRow(row.key, { unit: event.target.value as QuoteItem["unit"] })}
+              required
+              value={row.unit}
+            >
+              {quoteProductUnits.map((unit) => (
+                <option key={unit} value={unit}>
+                  {quoteProductUnitLabels[unit]}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+
+        <label className={labelClass}>
+          Ποσότητα
+          <input
+            className={`${inputClass} mt-2`}
+            min="0"
+            name={`quantity_${row.key}`}
+            onChange={(event) => updateRow(row.key, { quantity: event.target.value })}
+            step="0.01"
+            type="number"
+            value={row.quantity}
+          />
+        </label>
+        <label className={labelClass}>
+          Κόστος προ ΦΠΑ
+          <input
+            className={`${inputClass} mt-2`}
+            min="0"
+            name={`unit_price_net_${row.key}`}
+            onChange={(event) => updateRow(row.key, { unit_price_net: event.target.value })}
+            step="0.01"
+            type="number"
+            value={row.unit_price_net}
+          />
+        </label>
+        <label className={labelClass}>
+          ΦΠΑ %
+          <input
+            className={`${inputClass} mt-2`}
+            min="0"
+            name={`vat_rate_${row.key}`}
+            onChange={(event) => updateRow(row.key, { vat_rate: event.target.value })}
+            step="0.01"
+            type="number"
+            value={row.vat_rate}
+          />
+        </label>
+
+        {compact ? (
+          <input name={`sort_order_${row.key}`} type="hidden" value={row.sort_order} />
+        ) : (
+          <label className={labelClass}>
+            Σειρά
+            <input
+              className={`${inputClass} mt-2`}
+              name={`sort_order_${row.key}`}
+              onChange={(event) => updateRow(row.key, { sort_order: event.target.value })}
+              step="1"
+              type="number"
+              value={row.sort_order}
+            />
+          </label>
+        )}
+
+        {compact ? (
+          <button
+            className="rounded-full border border-red-200 px-4 py-2 text-sm font-bold text-red-700 transition hover:bg-red-50"
+            onClick={() => removeRow(row.key)}
+            type="button"
+          >
+            Αφαίρεση
+          </button>
+        ) : null}
+      </div>
+
+      <div className="mt-4 grid gap-4 md:grid-cols-[1fr_auto_auto] md:items-end">
+        <label className={labelClass}>
+          Σημειώσεις γραμμής
+          <textarea
+            className={`${inputClass} mt-2 min-h-20`}
+            name={`notes_${row.key}`}
+            onChange={(event) => updateRow(row.key, { notes: event.target.value })}
+            value={row.notes}
+          />
+        </label>
+        <div className="rounded-xl border border-[#d9b76f]/20 bg-white/75 p-3 text-sm">
+          <p className="text-xs font-bold uppercase tracking-wide text-[#0A5458]">Σύνολο κόστους</p>
+          <p className="mt-1 font-semibold text-[#2f2b25]">{formatCurrency(lineTotal)}</p>
+        </div>
+        {!compact ? (
+          <button
+            className="rounded-full border border-red-200 px-4 py-2 text-sm font-bold text-red-700 transition hover:bg-red-50"
+            onClick={() => removeRow(row.key)}
+            type="button"
+          >
+            Αφαίρεση
+          </button>
+        ) : null}
+      </div>
+
+      {needsReview ? (
+        <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-800">
+          Χρειάζεται έλεγχος κόστους πριν την αποστολή.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 export function QuoteEditor({ quote, items }: { quote: Quote; items: QuoteItem[] }) {
   const [rows, setRows] = useState<EditableQuoteItem[]>(items.map(getRowFromItem));
+  const [marginPercent, setMarginPercent] = useState(String(quote.margin_percent ?? 30));
+  const [offerVatRate, setOfferVatRate] = useState(String(quote.offer_vat_rate ?? 24));
   const [recalculated, setRecalculated] = useState(false);
   const guestBreakdown = getQuoteGuestBreakdown(quote);
+  const marginPercentNumber = getNumber(marginPercent);
+  const offerVatRateNumber = getNumber(offerVatRate);
+  const hasMarginError = !validateMarginPercent(marginPercentNumber);
 
-  const totals = useMemo(
-    () =>
-      calculateQuoteTotals(
-        rows.map((row) => ({
-          quantity: getNumber(row.quantity),
-          unit_price_net: getNumber(row.unit_price_net),
-          vat_rate: getNumber(row.vat_rate),
-        })),
-      ),
-    [rows],
-  );
-  const groupedRows = useMemo(
-    () =>
-      (["adult", "child", "service", "other"] as const)
-        .map((group) => ({
-          group,
-          rows: rows.filter((row) => getRowGroup(row) === group),
-        }))
-        .filter((group) => group.rows.length > 0),
-    [rows],
-  );
+  const calculatedTotals = useMemo(() => {
+    if (hasMarginError) {
+      return null;
+    }
+
+    return calculateQuoteTotals(getCalculationRows(rows), {
+      margin_percent: marginPercentNumber,
+      offer_vat_rate: offerVatRateNumber,
+    });
+  }, [hasMarginError, marginPercentNumber, offerVatRateNumber, rows]);
+  const totals = calculatedTotals ?? getFallbackTotals(quote);
+  const adultMenuRows = rows.filter((row) => row.line_type === "menu" && row.audience === "adult");
+  const childMenuRows = rows.filter((row) => row.line_type === "menu" && row.audience === "child");
+  const otherMenuRows = rows.filter((row) => row.line_type === "menu" && row.audience !== "adult" && row.audience !== "child");
+  const serviceRows = rows.filter((row) => row.line_type === "service");
+  const extraRows = rows.filter((row) => row.line_type === "extra" || row.is_extra_expense);
 
   function updateRow(rowKey: string, updates: Partial<EditableQuoteItem>) {
     setRows((currentRows) =>
@@ -143,16 +517,33 @@ export function QuoteEditor({ quote, items }: { quote: Quote; items: QuoteItem[]
     setRecalculated(false);
   }
 
-  function addRow() {
+  function addExtraExpense() {
     const nextSortOrder =
       rows.reduce((max, row) => Math.max(max, Number.parseInt(row.sort_order, 10) || 0), 0) + 10;
-    setRows((currentRows) => [...currentRows, getNewRow(nextSortOrder)]);
+    setRows((currentRows) => [...currentRows, getNewExtraExpenseRow(nextSortOrder)]);
     setRecalculated(false);
   }
 
   function removeRow(rowKey: string) {
     setRows((currentRows) => currentRows.filter((row) => row.key !== rowKey));
     setRecalculated(false);
+  }
+
+  function renderMenuGroup(title: string, groupRows: EditableQuoteItem[]) {
+    return (
+      <div className="space-y-3">
+        <h3 className="text-sm font-bold text-[#0A5458]">{title}</h3>
+        {groupRows.length === 0 ? (
+          <p className="rounded-xl border border-[#d9b76f]/20 bg-[#fffaf0]/70 p-4 text-sm leading-6 text-[#5f594f]">
+            Δεν υπάρχουν γραμμές σε αυτή την ομάδα.
+          </p>
+        ) : (
+          groupRows.map((row) => (
+            <QuoteLineCard key={row.key} removeRow={removeRow} row={row} updateRow={updateRow} />
+          ))
+        )}
+      </div>
+    );
   }
 
   return (
@@ -216,207 +607,57 @@ export function QuoteEditor({ quote, items }: { quote: Quote; items: QuoteItem[]
       </section>
 
       <section className="rounded-2xl border border-[#d9b76f]/25 bg-white/85 p-5 shadow-lg shadow-[#0A5458]/5">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <h2 className="text-xl font-semibold text-[#0A5458]">Γραμμές προσφοράς</h2>
-          <button
-            className="w-fit rounded-full border border-[#d9b76f]/40 px-5 py-2.5 text-sm font-bold text-[#0A5458] transition hover:bg-[#0A5458]/10"
-            onClick={addRow}
-            type="button"
-          >
-            Προσθήκη γραμμής
-          </button>
-        </div>
-
-        <div className="mt-5 space-y-4">
-          {groupedRows.map(({ group, rows: groupRows }) => (
-            <div className="space-y-3" key={group}>
-              <h3 className="text-sm font-bold text-[#0A5458]">{quoteItemGroupLabels[group]}</h3>
-              {groupRows.map((row) => {
-                const lineTotal = calculateQuoteItemLineTotal({
-                  quantity: getNumber(row.quantity),
-                  unit_price_net: getNumber(row.unit_price_net),
-                });
-                const needsReview = getNumber(row.unit_price_net) === 0 || row.notes.includes("Χρειάζεται");
-
-                return (
-                  <div className="rounded-2xl border border-[#d9b76f]/25 bg-[#fffaf0]/70 p-4" key={row.key}>
-                    <input name="row_key" type="hidden" value={row.key} />
-                    <input name={`item_id_${row.key}`} type="hidden" value={row.id ?? ""} />
-                    <input name={`product_id_${row.key}`} type="hidden" value={row.product_id ?? ""} />
-
-                    <div className="grid gap-4 lg:grid-cols-[1.4fr_0.8fr_0.82fr_0.8fr_0.65fr_0.82fr_0.58fr_0.65fr]">
-                      <label className={labelClass}>
-                        Προϊόν
-                        <input
-                          className={`${inputClass} mt-2`}
-                          name={`product_name_${row.key}`}
-                          onChange={(event) => updateRow(row.key, { product_name: event.target.value })}
-                          required
-                          type="text"
-                          value={row.product_name}
-                        />
-                      </label>
-                      <label className={labelClass}>
-                        Ομάδα
-                        <select
-                          className={`${inputClass} mt-2`}
-                          name={`audience_${row.key}`}
-                          onChange={(event) =>
-                            updateRow(row.key, {
-                              audience:
-                                event.target.value === ""
-                                  ? null
-                                  : (event.target.value as QuoteItemAudience),
-                            })
-                          }
-                          value={row.audience ?? ""}
-                        >
-                          {quoteItemAudienceOptions.map((option) => (
-                            <option key={option.value || "other"} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className={labelClass}>
-                        Κατηγορία
-                        <select
-                          className={`${inputClass} mt-2`}
-                          name={`category_${row.key}`}
-                          onChange={(event) => updateRow(row.key, { category: event.target.value as QuoteItem["category"] })}
-                          required
-                          value={row.category}
-                        >
-                          {quoteProductCategories.map((category) => (
-                            <option key={category} value={category}>
-                              {quoteProductCategoryLabels[category]}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className={labelClass}>
-                        Μονάδα
-                        <select
-                          className={`${inputClass} mt-2`}
-                          name={`unit_${row.key}`}
-                          onChange={(event) => updateRow(row.key, { unit: event.target.value as QuoteItem["unit"] })}
-                          required
-                          value={row.unit}
-                        >
-                          {quoteProductUnits.map((unit) => (
-                            <option key={unit} value={unit}>
-                              {quoteProductUnitLabels[unit]}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className={labelClass}>
-                        Ποσότητα
-                        <input
-                          className={`${inputClass} mt-2`}
-                          min="0"
-                          name={`quantity_${row.key}`}
-                          onChange={(event) => updateRow(row.key, { quantity: event.target.value })}
-                          step="0.01"
-                          type="number"
-                          value={row.quantity}
-                        />
-                      </label>
-                      <label className={labelClass}>
-                        Τιμή προ ΦΠΑ
-                        <input
-                          className={`${inputClass} mt-2`}
-                          min="0"
-                          name={`unit_price_net_${row.key}`}
-                          onChange={(event) => updateRow(row.key, { unit_price_net: event.target.value })}
-                          step="0.01"
-                          type="number"
-                          value={row.unit_price_net}
-                        />
-                      </label>
-                      <label className={labelClass}>
-                        ΦΠΑ %
-                        <input
-                          className={`${inputClass} mt-2`}
-                          min="0"
-                          name={`vat_rate_${row.key}`}
-                          onChange={(event) => updateRow(row.key, { vat_rate: event.target.value })}
-                          step="0.01"
-                          type="number"
-                          value={row.vat_rate}
-                        />
-                      </label>
-                      <label className={labelClass}>
-                        Σειρά
-                        <input
-                          className={`${inputClass} mt-2`}
-                          name={`sort_order_${row.key}`}
-                          onChange={(event) => updateRow(row.key, { sort_order: event.target.value })}
-                          step="1"
-                          type="number"
-                          value={row.sort_order}
-                        />
-                      </label>
-                    </div>
-
-                    <div className="mt-4 grid gap-4 md:grid-cols-[1fr_auto_auto] md:items-end">
-                      <label className={labelClass}>
-                        Σημειώσεις γραμμής
-                        <textarea
-                          className={`${inputClass} mt-2 min-h-20`}
-                          name={`notes_${row.key}`}
-                          onChange={(event) => updateRow(row.key, { notes: event.target.value })}
-                          value={row.notes}
-                        />
-                      </label>
-                      <div className="rounded-xl border border-[#d9b76f]/20 bg-white/75 p-3 text-sm">
-                        <p className="text-xs font-bold uppercase tracking-wide text-[#0A5458]">Σύνολο προ ΦΠΑ</p>
-                        <p className="mt-1 font-semibold text-[#2f2b25]">{formatCurrency(lineTotal)}</p>
-                      </div>
-                      <button
-                        className="rounded-full border border-red-200 px-4 py-2 text-sm font-bold text-red-700 transition hover:bg-red-50"
-                        onClick={() => removeRow(row.key)}
-                        type="button"
-                      >
-                        Αφαίρεση
-                      </button>
-                    </div>
-
-                    {needsReview ? (
-                      <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-800">
-                        Χρειάζεται έλεγχος τιμής πριν την αποστολή.
-                      </p>
-                    ) : null}
-                  </div>
-                );
-              })}
-            </div>
-          ))}
-
-          {rows.length === 0 ? (
-            <p className="rounded-xl border border-[#d9b76f]/20 bg-[#fffaf0]/70 p-4 text-sm leading-6 text-[#5f594f]">
-              Δεν υπάρχουν γραμμές στην προσφορά.
-            </p>
-          ) : null}
-        </div>
-
-        <div className="mt-5 flex flex-wrap gap-3">
-          <button
-            className="rounded-full border border-[#d9b76f]/40 px-5 py-2.5 text-sm font-bold text-[#0A5458] transition hover:bg-[#0A5458]/10"
-            onClick={() => setRecalculated(true)}
-            type="button"
-          >
-            Επανυπολογισμός
-          </button>
-          {recalculated ? (
-            <span className="self-center text-sm font-semibold text-emerald-700">
-              Τα σύνολα ενημερώθηκαν στην προεπισκόπηση.
-            </span>
-          ) : null}
+        <h2 className="text-xl font-semibold text-[#0A5458]">Κόστος μενού</h2>
+        <div className="mt-5 space-y-5">
+          {renderMenuGroup("Μενού ενηλίκων", adultMenuRows)}
+          {renderMenuGroup("Μενού παιδιών", childMenuRows)}
+          {otherMenuRows.length > 0 ? renderMenuGroup("Άλλες γραμμές μενού", otherMenuRows) : null}
         </div>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[1fr_0.45fr]">
+      <section className="rounded-2xl border border-[#d9b76f]/25 bg-white/85 p-5 shadow-lg shadow-[#0A5458]/5">
+        <h2 className="text-xl font-semibold text-[#0A5458]">Πρόσθετα κόστη</h2>
+        <div className="mt-5 space-y-4">
+          {serviceRows.length === 0 ? (
+            <p className="rounded-xl border border-[#d9b76f]/20 bg-[#fffaf0]/70 p-4 text-sm leading-6 text-[#5f594f]">
+              Δεν υπάρχουν πρόσθετα κόστη από τον κατάλογο. Μπορείτε να προσθέσετε έκτακτα έξοδα χειροκίνητα.
+            </p>
+          ) : (
+            serviceRows.map((row) => (
+              <QuoteLineCard
+                compact
+                key={row.key}
+                removeRow={removeRow}
+                row={row}
+                title={getServiceDisplayName(row)}
+                updateRow={updateRow}
+              />
+            ))
+          )}
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-[#d9b76f]/25 bg-white/85 p-5 shadow-lg shadow-[#0A5458]/5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <h2 className="text-xl font-semibold text-[#0A5458]">Έκτακτα έξοδα</h2>
+          <button className={buttonOutlineClass} onClick={addExtraExpense} type="button">
+            Προσθήκη εξόδου
+          </button>
+        </div>
+        <div className="mt-5 space-y-4">
+          {extraRows.length === 0 ? (
+            <p className="rounded-xl border border-[#d9b76f]/20 bg-[#fffaf0]/70 p-4 text-sm leading-6 text-[#5f594f]">
+              Δεν υπάρχουν έκτακτα έξοδα.
+            </p>
+          ) : (
+            extraRows.map((row) => (
+              <QuoteLineCard key={row.key} removeRow={removeRow} row={row} updateRow={updateRow} />
+            ))
+          )}
+        </div>
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-[1fr_0.5fr]">
         <div className="rounded-2xl border border-[#d9b76f]/25 bg-white/85 p-5 shadow-lg shadow-[#0A5458]/5">
           <h2 className="text-xl font-semibold text-[#0A5458]">Σημειώσεις & όροι</h2>
           <div className="mt-5 grid gap-4">
@@ -436,28 +677,80 @@ export function QuoteEditor({ quote, items }: { quote: Quote; items: QuoteItem[]
         </div>
 
         <aside className="rounded-2xl border border-[#d9b76f]/25 bg-[#0A5458] p-5 text-white shadow-lg shadow-[#0A5458]/10">
-          <h2 className="text-xl font-semibold">Σύνολα</h2>
+          <h2 className="text-xl font-semibold">Υπολογισμός προσφοράς</h2>
           <div className="mt-5 space-y-3 text-sm">
-            <div className="flex items-center justify-between gap-4">
-              <span>Υποσύνολο</span>
-              <span className="font-semibold">{formatCurrency(totals.subtotal_net)}</span>
-            </div>
-            <div className="flex items-center justify-between gap-4">
-              <span>ΦΠΑ</span>
-              <span className="font-semibold">{formatCurrency(totals.vat_amount)}</span>
-            </div>
+            <SummaryLine label="Κόστος φαγητού & ποτών" value={formatCurrency(totals.food_drinks_cost_net)} />
+            <SummaryLine label="Ενοικίαση van" value={formatCurrency(totals.van_rental_cost_net)} />
+            <SummaryLine label="Έξοδα μεταφοράς" value={formatCurrency(totals.transport_cost_net)} />
+            <SummaryLine label="Προσωπικό" value={formatCurrency(totals.staff_cost_net)} />
+            <SummaryLine label="Αναλώσιμα" value={formatCurrency(totals.consumables_cost_net)} />
+            <SummaryLine label="Έκτακτα έξοδα" value={formatCurrency(totals.extra_costs_net)} />
             <div className="border-t border-white/20 pt-3">
-              <div className="flex items-center justify-between gap-4 text-lg font-bold">
-                <span>Σύνολο με ΦΠΑ</span>
-                <span>{formatCurrency(totals.total_gross)}</span>
-              </div>
+              <SummaryLine strong label="Τελικό κόστος" value={formatCurrency(totals.total_cost_net)} />
+            </div>
+            <label className="block pt-2 text-sm font-semibold">
+              Margin %
+              <input
+                className="mt-2 w-full rounded-xl border border-white/20 bg-white px-3 py-2 text-sm text-[#2f2b25] outline-none focus:border-[#d9b76f]"
+                max="99.99"
+                min="0"
+                name="margin_percent"
+                onChange={(event) => {
+                  setMarginPercent(event.target.value);
+                  setRecalculated(false);
+                }}
+                step="0.01"
+                type="number"
+                value={marginPercent}
+              />
+            </label>
+            {hasMarginError ? (
+              <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-bold text-red-800">
+                Το Margin πρέπει να είναι από 0 έως και μικρότερο από 100.
+              </p>
+            ) : null}
+            <label className="block text-sm font-semibold">
+              ΦΠΑ προσφοράς %
+              <input
+                className="mt-2 w-full rounded-xl border border-white/20 bg-white px-3 py-2 text-sm text-[#2f2b25] outline-none focus:border-[#d9b76f]"
+                min="0"
+                name="offer_vat_rate"
+                onChange={(event) => {
+                  setOfferVatRate(event.target.value);
+                  setRecalculated(false);
+                }}
+                step="0.01"
+                type="number"
+                value={offerVatRate}
+              />
+            </label>
+            <div className="space-y-3 border-t border-white/20 pt-3">
+              <SummaryLine label="Προσφορά προ ΦΠΑ" value={formatCurrency(totals.offer_net)} />
+              <SummaryLine label="ΦΠΑ" value={formatCurrency(totals.offer_vat_amount)} />
+              <SummaryLine strong label="Προσφορά με ΦΠΑ" value={formatCurrency(totals.offer_gross)} />
+              <SummaryLine label="Κέρδος" value={formatCurrency(totals.profit_net)} />
             </div>
           </div>
         </aside>
       </section>
 
       <div className="flex flex-wrap gap-3">
-        <button className="rounded-full bg-[#0A5458] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#07383b]" type="submit">
+        <button className={buttonOutlineClass} onClick={() => setRecalculated(true)} type="button">
+          Επανυπολογισμός
+        </button>
+        {recalculated && !hasMarginError ? (
+          <span className="self-center text-sm font-semibold text-emerald-700">
+            Τα σύνολα ενημερώθηκαν στην προεπισκόπηση.
+          </span>
+        ) : null}
+      </div>
+
+      <div className="flex flex-wrap gap-3">
+        <button
+          className="rounded-full bg-[#0A5458] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#07383b] disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={hasMarginError}
+          type="submit"
+        >
           Αποθήκευση αλλαγών
         </button>
         <Link
@@ -465,7 +758,7 @@ export function QuoteEditor({ quote, items }: { quote: Quote; items: QuoteItem[]
           href={`/admin/quotes/${quote.id}/pdf`}
           target="_blank"
         >
-          Προεπισκόπηση PDF
+          Προεπισκόπηση προσφοράς
         </Link>
         <Link
           className="rounded-full border border-[#d9b76f]/40 px-5 py-3 text-sm font-bold text-[#0A5458] transition hover:bg-[#0A5458]/10"

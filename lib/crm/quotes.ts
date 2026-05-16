@@ -35,6 +35,19 @@ export type Quote = {
   adult_guest_count: number | null;
   child_guest_count: number | null;
   guest_count: number | null;
+  food_drinks_cost_net: number;
+  van_rental_cost_net: number;
+  transport_cost_net: number;
+  staff_cost_net: number;
+  consumables_cost_net: number;
+  extra_costs_net: number;
+  total_cost_net: number;
+  margin_percent: number;
+  offer_net: number;
+  profit_net: number;
+  offer_vat_rate: number;
+  offer_vat_amount: number;
+  offer_gross: number;
   subtotal_net: number;
   vat_amount: number;
   total_gross: number;
@@ -46,6 +59,7 @@ export type Quote = {
 };
 
 export type QuoteItemAudience = "adult" | "child" | "service";
+export type QuoteItemLineType = "menu" | "service" | "extra";
 
 export type QuoteItem = {
   id: string;
@@ -60,11 +74,26 @@ export type QuoteItem = {
   unit_price_net: number;
   vat_rate: number;
   line_total_net: number;
+  line_type: QuoteItemLineType;
+  is_extra_expense: boolean;
   sort_order: number;
   notes: string | null;
 };
 
 export type QuoteTotals = {
+  food_drinks_cost_net: number;
+  van_rental_cost_net: number;
+  transport_cost_net: number;
+  staff_cost_net: number;
+  consumables_cost_net: number;
+  extra_costs_net: number;
+  total_cost_net: number;
+  margin_percent: number;
+  offer_net: number;
+  profit_net: number;
+  offer_vat_rate: number;
+  offer_vat_amount: number;
+  offer_gross: number;
   subtotal_net: number;
   vat_amount: number;
   total_gross: number;
@@ -80,6 +109,8 @@ export type QuoteItemInput = {
   quantity: number;
   unit_price_net: number;
   vat_rate: number;
+  line_type?: QuoteItemLineType;
+  is_extra_expense?: boolean;
   sort_order: number;
   notes?: string | null;
 };
@@ -122,15 +153,28 @@ export const quoteItemAudienceLabels: Record<QuoteItemAudience, string> = {
   service: "Πρόσθετα κόστη",
 };
 
+export const quoteItemLineTypes: QuoteItemLineType[] = ["menu", "service", "extra"];
+
+export const quoteItemLineTypeLabels: Record<QuoteItemLineType, string> = {
+  menu: "Μενού",
+  service: "Πρόσθετα κόστη",
+  extra: "Έκτακτο έξοδο",
+};
+
 export const quoteItemGroupLabels = {
   adult: "Μενού ενηλίκων",
   child: "Μενού παιδιών",
   service: "Πρόσθετα κόστη",
+  extra: "Έκτακτα έξοδα",
   other: "Άλλο",
-} satisfies Record<QuoteItemAudience | "other", string>;
+} satisfies Record<QuoteItemAudience | "extra" | "other", string>;
 
 export function isQuoteItemAudience(value: string): value is QuoteItemAudience {
   return value === "adult" || value === "child" || value === "service";
+}
+
+export function isQuoteItemLineType(value: string): value is QuoteItemLineType {
+  return quoteItemLineTypes.includes(value as QuoteItemLineType);
 }
 
 export const defaultQuotePublicNotes =
@@ -151,25 +195,173 @@ export function calculateQuoteItemLineTotal(item: Pick<QuoteItemInput, "quantity
   return roundMoney(item.quantity * item.unit_price_net);
 }
 
-export function calculateQuoteTotals(items: Array<Pick<QuoteItemInput, "quantity" | "unit_price_net" | "vat_rate">>) {
-  return items.reduce<QuoteTotals>(
-    (totals, item) => {
-      const lineTotal = calculateQuoteItemLineTotal(item);
+type QuoteCalculationItem = Pick<QuoteItemInput, "quantity" | "unit_price_net"> &
+  Partial<Pick<QuoteItemInput, "product_name" | "category" | "audience" | "line_type" | "is_extra_expense">> & {
+    line_total_net?: number | null;
+    product_key?: string | null;
+  };
 
-      totals.subtotal_net = roundMoney(totals.subtotal_net + lineTotal);
-      totals.vat_amount = roundMoney(totals.vat_amount + (lineTotal * item.vat_rate) / 100);
-      totals.total_gross = roundMoney(totals.subtotal_net + totals.vat_amount);
+type QuoteCalculationOptions = {
+  margin_percent?: number;
+  offer_vat_rate?: number;
+};
+
+export function validateMarginPercent(marginPercent: number) {
+  return Number.isFinite(marginPercent) && marginPercent >= 0 && marginPercent < 100;
+}
+
+export function calculateQuoteTotals(items: QuoteCalculationItem[], options: QuoteCalculationOptions = {}) {
+  const marginPercent = options.margin_percent ?? 30;
+  const offerVatRate = options.offer_vat_rate ?? 24;
+
+  if (!validateMarginPercent(marginPercent)) {
+    throw new Error("Invalid margin percentage.");
+  }
+
+  if (!Number.isFinite(offerVatRate) || offerVatRate < 0) {
+    throw new Error("Invalid offer VAT rate.");
+  }
+
+  const costTotals = items.reduce(
+    (totals, item) => {
+      const lineTotal = getQuoteCalculationLineTotal(item);
+      const costGroup = getQuoteItemCostGroup(item);
+
+      if (costGroup === "food_drinks") {
+        totals.food_drinks_cost_net = roundMoney(totals.food_drinks_cost_net + lineTotal);
+      } else if (costGroup === "van_rental") {
+        totals.van_rental_cost_net = roundMoney(totals.van_rental_cost_net + lineTotal);
+      } else if (costGroup === "transport") {
+        totals.transport_cost_net = roundMoney(totals.transport_cost_net + lineTotal);
+      } else if (costGroup === "staff") {
+        totals.staff_cost_net = roundMoney(totals.staff_cost_net + lineTotal);
+      } else if (costGroup === "consumables") {
+        totals.consumables_cost_net = roundMoney(totals.consumables_cost_net + lineTotal);
+      } else if (costGroup === "extra") {
+        totals.extra_costs_net = roundMoney(totals.extra_costs_net + lineTotal);
+      }
+
+      totals.total_cost_net = roundMoney(totals.total_cost_net + lineTotal);
 
       return totals;
     },
     {
-      subtotal_net: 0,
-      vat_amount: 0,
-      total_gross: 0,
+      food_drinks_cost_net: 0,
+      van_rental_cost_net: 0,
+      transport_cost_net: 0,
+      staff_cost_net: 0,
+      consumables_cost_net: 0,
+      extra_costs_net: 0,
+      total_cost_net: 0,
     },
   );
+
+  const offerNet =
+    marginPercent === 0
+      ? costTotals.total_cost_net
+      : roundMoney(costTotals.total_cost_net / (1 - marginPercent / 100));
+  const profitNet = roundMoney(offerNet - costTotals.total_cost_net);
+  const offerVatAmount = roundMoney((offerNet * offerVatRate) / 100);
+  const offerGross = roundMoney(offerNet + offerVatAmount);
+
+  return {
+    ...costTotals,
+    margin_percent: marginPercent,
+    offer_net: offerNet,
+    profit_net: profitNet,
+    offer_vat_rate: offerVatRate,
+    offer_vat_amount: offerVatAmount,
+    offer_gross: offerGross,
+    subtotal_net: offerNet,
+    vat_amount: offerVatAmount,
+    total_gross: offerGross,
+  } satisfies QuoteTotals;
 }
 
-function roundMoney(value: number) {
+export function getQuoteItemLineType(
+  item: Partial<Pick<QuoteItemInput, "line_type" | "audience" | "category" | "is_extra_expense">>,
+) {
+  if (item.is_extra_expense || item.line_type === "extra") {
+    return "extra";
+  }
+
+  if (item.line_type === "menu" || item.line_type === "service") {
+    return item.line_type;
+  }
+
+  if (item.audience === "adult" || item.audience === "child") {
+    return "menu";
+  }
+
+  if (item.audience === "service" || item.category === "service") {
+    return "service";
+  }
+
+  return "menu";
+}
+
+export function getQuoteItemCostGroup(item: QuoteCalculationItem) {
+  const lineType = getQuoteItemLineType(item);
+
+  if (lineType === "extra") {
+    return "extra";
+  }
+
+  if (lineType === "menu") {
+    return "food_drinks";
+  }
+
+  if (isVanRentalCost(item)) {
+    return "van_rental";
+  }
+
+  if (isTransportCost(item)) {
+    return "transport";
+  }
+
+  if (isStaffCost(item)) {
+    return "staff";
+  }
+
+  if (isConsumablesCost(item)) {
+    return "consumables";
+  }
+
+  return "service";
+}
+
+export function isVanRentalCost(item: Pick<QuoteCalculationItem, "product_name" | "product_key">) {
+  const searchableValue = getSearchableProductValue(item);
+  return searchableValue.includes("van-rental-cost") || (searchableValue.includes("van") && searchableValue.includes("ενοικ"));
+}
+
+export function isTransportCost(item: Pick<QuoteCalculationItem, "product_name" | "product_key">) {
+  const searchableValue = getSearchableProductValue(item);
+  return searchableValue.includes("transport-cost") || searchableValue.includes("μεταφορ") || searchableValue.includes("transport");
+}
+
+export function isStaffCost(item: Pick<QuoteCalculationItem, "product_name" | "product_key">) {
+  const searchableValue = getSearchableProductValue(item);
+  return searchableValue.includes("staff-cost") || searchableValue.includes("προσωπ") || searchableValue.includes("staff");
+}
+
+export function isConsumablesCost(item: Pick<QuoteCalculationItem, "product_name" | "product_key">) {
+  const searchableValue = getSearchableProductValue(item);
+  return searchableValue.includes("consumables-cost") || searchableValue.includes("αναλωσιμ") || searchableValue.includes("αναλώσιμ");
+}
+
+function getQuoteCalculationLineTotal(item: QuoteCalculationItem) {
+  if (typeof item.line_total_net === "number" && Number.isFinite(item.line_total_net)) {
+    return roundMoney(item.line_total_net);
+  }
+
+  return calculateQuoteItemLineTotal(item);
+}
+
+function getSearchableProductValue(item: Pick<QuoteCalculationItem, "product_name" | "product_key">) {
+  return `${item.product_key ?? ""} ${item.product_name ?? ""}`.trim().toLocaleLowerCase("el-GR");
+}
+
+export function roundMoney(value: number) {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }

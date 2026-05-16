@@ -8,6 +8,7 @@ import {
   calculateQuoteItemLineTotal,
   calculateQuoteTotals,
   isQuoteItemAudience,
+  isQuoteItemLineType,
   isQuoteStatus,
   type QuoteItemInput,
 } from "@/lib/crm/quotes";
@@ -23,11 +24,11 @@ function getNullableString(formData: FormData, key: string) {
   return value || null;
 }
 
-function getNonNegativeNumber(formData: FormData, key: string) {
+function getNonNegativeNumber(formData: FormData, key: string, defaultValue = 0) {
   const value = getString(formData, key);
 
   if (!value) {
-    return 0;
+    return defaultValue;
   }
 
   const parsed = Number.parseFloat(value.replace(",", "."));
@@ -37,6 +38,16 @@ function getNonNegativeNumber(formData: FormData, key: string) {
   }
 
   return parsed;
+}
+
+function getMarginPercent(formData: FormData) {
+  const value = getNonNegativeNumber(formData, "margin_percent");
+
+  if (value >= 100) {
+    throw new Error("Invalid margin percentage.");
+  }
+
+  return value;
 }
 
 function getInteger(formData: FormData, key: string, defaultValue: number) {
@@ -67,12 +78,15 @@ function getQuoteItemsFromForm(formData: FormData) {
     const audience = getString(formData, `audience_${rowKey}`);
     const category = getString(formData, `category_${rowKey}`);
     const unit = getString(formData, `unit_${rowKey}`);
+    const lineType = getString(formData, `line_type_${rowKey}`) || "menu";
+    const isExtraExpense = formData.get(`is_extra_expense_${rowKey}`) === "1";
 
     if (
       !productName ||
       (audience && !isQuoteItemAudience(audience)) ||
       !isQuoteProductCategory(category) ||
-      !isQuoteProductUnit(unit)
+      !isQuoteProductUnit(unit) ||
+      !isQuoteItemLineType(lineType)
     ) {
       throw new Error("Invalid quote item.");
     }
@@ -87,6 +101,8 @@ function getQuoteItemsFromForm(formData: FormData) {
       quantity: getNonNegativeNumber(formData, `quantity_${rowKey}`),
       unit_price_net: getNonNegativeNumber(formData, `unit_price_net_${rowKey}`),
       vat_rate: getNonNegativeNumber(formData, `vat_rate_${rowKey}`),
+      line_type: lineType,
+      is_extra_expense: isExtraExpense || lineType === "extra",
       sort_order: getInteger(formData, `sort_order_${rowKey}`, index + 1),
       notes: getNullableString(formData, `notes_${rowKey}`),
     };
@@ -105,6 +121,8 @@ export async function updateQuote(formData: FormData) {
   }
 
   let quoteItems: QuoteItemInput[];
+  let marginPercent = 30;
+  let offerVatRate = 24;
 
   try {
     quoteItems = getQuoteItemsFromForm(formData);
@@ -112,7 +130,17 @@ export async function updateQuote(formData: FormData) {
     redirect(`/admin/quotes/${quoteId}?error=1`);
   }
 
-  const quoteTotals = calculateQuoteTotals(quoteItems);
+  try {
+    marginPercent = getMarginPercent(formData);
+    offerVatRate = getNonNegativeNumber(formData, "offer_vat_rate", 24);
+  } catch {
+    redirect(`/admin/quotes/${quoteId}?marginError=1`);
+  }
+
+  const quoteTotals = calculateQuoteTotals(quoteItems, {
+    margin_percent: marginPercent,
+    offer_vat_rate: offerVatRate,
+  });
   const supabase = createSupabaseAdminClient();
   const { data: existingItems, error: existingItemsError } = await supabase
     .from("quote_items")
@@ -154,6 +182,8 @@ export async function updateQuote(formData: FormData) {
       unit_price_net: item.unit_price_net,
       vat_rate: item.vat_rate,
       line_total_net: calculateQuoteItemLineTotal(item),
+      line_type: item.line_type ?? "menu",
+      is_extra_expense: item.is_extra_expense ?? false,
       sort_order: item.sort_order,
       notes: item.notes ?? null,
     };
@@ -187,6 +217,19 @@ export async function updateQuote(formData: FormData) {
       public_notes: getNullableString(formData, "public_notes"),
       terms: getNullableString(formData, "terms"),
       internal_notes: getNullableString(formData, "internal_notes"),
+      food_drinks_cost_net: quoteTotals.food_drinks_cost_net,
+      van_rental_cost_net: quoteTotals.van_rental_cost_net,
+      transport_cost_net: quoteTotals.transport_cost_net,
+      staff_cost_net: quoteTotals.staff_cost_net,
+      consumables_cost_net: quoteTotals.consumables_cost_net,
+      extra_costs_net: quoteTotals.extra_costs_net,
+      total_cost_net: quoteTotals.total_cost_net,
+      margin_percent: quoteTotals.margin_percent,
+      offer_net: quoteTotals.offer_net,
+      profit_net: quoteTotals.profit_net,
+      offer_vat_rate: quoteTotals.offer_vat_rate,
+      offer_vat_amount: quoteTotals.offer_vat_amount,
+      offer_gross: quoteTotals.offer_gross,
       subtotal_net: quoteTotals.subtotal_net,
       vat_amount: quoteTotals.vat_amount,
       total_gross: quoteTotals.total_gross,

@@ -38,7 +38,10 @@ type RequestQuoteSummary = {
   id: string;
   quote_number: string;
   status: QuoteStatus;
-  total_gross: number;
+  total_cost_net: number;
+  margin_percent: number;
+  offer_gross: number;
+  profit_net: number;
   created_at: string;
   sent_at: string | null;
 };
@@ -152,14 +155,18 @@ export default async function RequestDetailPage({ params, searchParams }: Reques
   const createQuoteAction = generateQuoteForRequest.bind(null, request.id);
   const { data: quoteData, error: quotesError } = await supabase
     .from("quotes")
-    .select("id, quote_number, status, total_gross, created_at, sent_at")
+    .select("id, quote_number, status, total_cost_net, margin_percent, offer_gross, profit_net, total_gross, created_at, sent_at")
     .eq("request_id", request.id)
     .order("created_at", { ascending: false });
   const quotes = (quoteData ?? []).map((quote) => ({
     id: String(quote.id),
     quote_number: String(quote.quote_number),
     status: quote.status as QuoteStatus,
-    total_gross: Number(quote.total_gross) || 0,
+    total_cost_net: Number(quote.total_cost_net) || 0,
+    margin_percent:
+      quote.margin_percent === null || quote.margin_percent === undefined ? 30 : Number(quote.margin_percent),
+    offer_gross: Number(quote.offer_gross) || Number(quote.total_gross) || 0,
+    profit_net: Number(quote.profit_net) || 0,
     created_at: String(quote.created_at),
     sent_at: typeof quote.sent_at === "string" ? quote.sent_at : null,
   })) satisfies RequestQuoteSummary[];
@@ -289,9 +296,12 @@ export default async function RequestDetailPage({ params, searchParams }: Reques
                 <table className="min-w-full divide-y divide-[#d9b76f]/20 text-left text-sm">
                   <thead className="bg-[#f8f2e5] text-xs font-bold uppercase tracking-wide text-[#0A5458]">
                     <tr>
-                      <th className="px-3 py-2">Αριθμός</th>
+                      <th className="px-3 py-2">Αριθμός προσφοράς</th>
                       <th className="px-3 py-2">Κατάσταση</th>
-                      <th className="px-3 py-2">Σύνολο</th>
+                      <th className="px-3 py-2">Τελικό κόστος</th>
+                      <th className="px-3 py-2">Margin</th>
+                      <th className="px-3 py-2">Προσφορά</th>
+                      <th className="px-3 py-2">Κέρδος</th>
                       <th className="px-3 py-2">Δημιουργία</th>
                       <th className="px-3 py-2">Αποστολή</th>
                     </tr>
@@ -309,7 +319,10 @@ export default async function RequestDetailPage({ params, searchParams }: Reques
                             {getQuoteStatusLabel(quote.status)}
                           </span>
                         </td>
-                        <td className="whitespace-nowrap px-3 py-2">{formatCurrency(quote.total_gross)}</td>
+                        <td className="whitespace-nowrap px-3 py-2">{formatCurrency(quote.total_cost_net)}</td>
+                        <td className="whitespace-nowrap px-3 py-2">{formatNumber(quote.margin_percent, 2)}%</td>
+                        <td className="whitespace-nowrap px-3 py-2">{formatCurrency(quote.offer_gross)}</td>
+                        <td className="whitespace-nowrap px-3 py-2">{formatCurrency(quote.profit_net)}</td>
                         <td className="whitespace-nowrap px-3 py-2">{formatDateTime(quote.created_at)}</td>
                         <td className="whitespace-nowrap px-3 py-2">{formatDateTime(quote.sent_at)}</td>
                       </tr>

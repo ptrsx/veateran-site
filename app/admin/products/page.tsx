@@ -47,9 +47,9 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
   return (
     <AdminShell>
       <div>
-        <h1 className="text-3xl font-semibold tracking-tight text-[#0A5458]">Προϊόντα & τιμές</h1>
+        <h1 className="text-3xl font-semibold tracking-tight text-[#0A5458]">Προϊόντα & κόστη</h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-[#5f594f]">
-          Ορισμός προϊόντων και τιμών προ ΦΠΑ για τη δημιουργία προσφορών.
+          Ορισμός προϊόντων και εσωτερικών κόστων προ ΦΠΑ για τη δημιουργία προσφορών.
         </p>
       </div>
 
